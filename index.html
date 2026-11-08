@@ -312,7 +312,7 @@
   <img id="lbImg" src="">
   <div class="lb-bar">
     <span>点击空白处关闭</span>
-    <a id="lbDownload" href="" target="_blank" download>下载原图</a>
+    <a id="lbDownload" href="" target="_blank" rel="noopener" download>下载原图</a>
   </div>
 </div>
 
@@ -331,6 +331,12 @@ const FIELD_TYPES = {
   select:   "下拉选择"
 };
 
+// HTML 转义：配置/接口数据拼进 HTML 前必须转义，防 XSS
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
 // 内置占位示例（不含真实应用数据，导入配置文件后可替换或删除）
 const DEFAULT_TOOLS = [
   {
@@ -343,12 +349,19 @@ const DEFAULT_TOOLS = [
   }
 ];
 
-let tools = JSON.parse(localStorage.getItem(LS.tools) || "null") || DEFAULT_TOOLS;
+// localStorage 数据损坏时回退到默认示例工具，避免页面白屏
+let tools = DEFAULT_TOOLS;
+try {
+  const rawTools = JSON.parse(localStorage.getItem(LS.tools) || "null");
+  if (Array.isArray(rawTools)) tools = rawTools;
+} catch (e) { /* 存储数据损坏，使用默认示例 */ }
 // 修正缺失 id 的工具（配置文件可能不带 id）
 tools.forEach((t, i) => { if (!t.id) t.id = "t" + Date.now() + "_" + i; });
 // 去重：同应用ID或同名的工具只保留第一个（清理历史遗留的重复项）
 tools = tools.filter((t, i) => tools.findIndex(x => (t.webappId && x.webappId === t.webappId) || (t.name && x.name === t.name)) === i);
-let activeId = localStorage.getItem(LS.active) || (tools[0] && tools[0].id);
+let activeId;
+try { activeId = localStorage.getItem(LS.active) || (tools[0] && tools[0].id); }
+catch (e) { activeId = tools[0] && tools[0].id; }
 if (!tools.some(t => t.id === activeId)) activeId = tools[0] && tools[0].id;  // 修正失效的选中状态
 let editingToolId = null;
 let editingFields = [];      // 配置弹窗中正在编辑的字段数组
@@ -367,16 +380,30 @@ function renderToolList() {
     const configured = t.webappId && t.fields && t.fields.length && t.fields.every(f => f.nodeId);
     const el = document.createElement("div");
     el.className = "tool-item" + (t.id === activeId ? " active" : "");
-    el.innerHTML = `
-      <div class="tool-icon">${t.icon || "🧩"}</div>
-      <div class="tool-meta">
-        <div class="tool-name">${t.name || "未命名"}</div>
-        <div class="tool-desc">${t.desc || ""}</div>
-        <div class="tool-status ${configured ? "ok" : ""}">${configured ? "● 已配置" : "○ 待配置"}</div>
-      </div>
-      <div class="tool-del" title="删除此工具">✕</div>`;
-    el.querySelector(".tool-del").onclick = e => {
+    // 用 DOM/textContent 构建，避免工具配置里的恶意文本注入 HTML
+    const iconEl = document.createElement("div");
+    iconEl.className = "tool-icon";
+    iconEl.textContent = t.icon || "🧩";
+    const metaEl = document.createElement("div");
+    metaEl.className = "tool-meta";
+    const nameEl = document.createElement("div");
+    nameEl.className = "tool-name";
+    nameEl.textContent = t.name || "未命名";
+    const descEl = document.createElement("div");
+    descEl.className = "tool-desc";
+    descEl.textContent = t.desc || "";
+    const statusEl = document.createElement("div");
+    statusEl.className = "tool-status" + (configured ? " ok" : "");
+    statusEl.textContent = configured ? "● 已配置" : "○ 待配置";
+    metaEl.append(nameEl, descEl, statusEl);
+    const delEl = document.createElement("div");
+    delEl.className = "tool-del";
+    delEl.title = "删除此工具";
+    delEl.textContent = "✕";
+    el.append(iconEl, metaEl, delEl);
+    delEl.onclick = e => {
       e.stopPropagation();
+      if (currentRun && runningToolId === t.id) { alert("该工具正在运行，请先取消任务"); return; }
       if (!confirm("确定删除「" + (t.name || "未命名") + "」吗？")) return;
       tools = tools.filter(x => x.id !== t.id);
       if (activeId === t.id) activeId = tools[0] && tools[0].id;
@@ -411,21 +438,21 @@ function renderWorkspace() {
     const span = (f.type === "textarea" || f.type === "image") ? " span2" : "";
     if (f.type === "image") {
       return `<div class="field${span}">
-        <label>${f.label}</label>
+        <label>${esc(f.label)}</label>
         <div class="upload-area" id="ua_${i}"><span>双击选择图片，或拖拽到这里<br><small style="color:#4a5470">JPG / PNG / WEBP，≤30MB；上传后单击可预览缩放</small></span></div>
         <input type="file" id="fi_${i}" accept="image/*" style="display:none">
       </div>`;
     }
     if (f.type === "textarea") {
-      return `<div class="field${span}"><label>${f.label}</label><textarea id="ff_${i}" autocomplete="off" placeholder="${f.def ? "" : "请输入"}">${f.def || ""}</textarea></div>`;
+      return `<div class="field${span}"><label>${esc(f.label)}</label><textarea id="ff_${i}" autocomplete="off" placeholder="${f.def ? "" : "请输入"}">${esc(f.def)}</textarea></div>`;
     }
     if (f.type === "select") {
       const opts = (f.def || "").split(",").map(s => s.trim()).filter(Boolean);
-      return `<div class="field${span}"><label>${f.label}</label>
-        <select id="ff_${i}" autocomplete="off">${opts.map(o => `<option value="${o}">${o}</option>`).join("")}</select></div>`;
+      return `<div class="field${span}"><label>${esc(f.label)}</label>
+        <select id="ff_${i}" autocomplete="off">${opts.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join("")}</select></div>`;
     }
     const inputType = f.type === "number" ? "number" : "text";
-    return `<div class="field${span}"><label>${f.label}</label><input type="${inputType}" id="ff_${i}" value="${f.def || ""}" autocomplete="off" data-form-type="other" data-lpignore="true"></div>`;
+    return `<div class="field${span}"><label>${esc(f.label)}</label><input type="${inputType}" id="ff_${i}" value="${esc(f.def)}" autocomplete="off" data-form-type="other" data-lpignore="true"></div>`;
   }).join("") + "</div>";
 
   // 给图片字段绑定事件
@@ -437,7 +464,7 @@ function renderWorkspace() {
     ua.onclick = () => {
       if (!fieldFiles[i]) { pickImageField(i, fi); return; }
       clearTimeout(ua._clickTimer);
-      ua._clickTimer = setTimeout(() => openLightbox(URL.createObjectURL(fieldFiles[i])), 260);
+      ua._clickTimer = setTimeout(() => { if (fieldFiles[i]) openLightbox(previewUrlFor(fieldFiles[i])); }, 260);
     };
     ua.ondblclick = () => { clearTimeout(ua._clickTimer); pickImageField(i, fi); };
     fi.onchange = e => { if (e.target.files[0]) pickFile(i, e.target.files[0]); };
@@ -500,6 +527,21 @@ function pickFile(fieldIdx, file) {
   reader.readAsDataURL(file);
 }
 
+// 图片预览 objectURL 缓存：同一 File 复用不重复创建，灯箱关闭时回收不再使用的
+const previewUrls = new Map();  // File -> objectURL
+function previewUrlFor(file) {
+  let u = previewUrls.get(file);
+  if (!u) { u = URL.createObjectURL(file); previewUrls.set(file, u); }
+  return u;
+}
+function revokeUnusedPreviewUrls() {
+  const live = new Set();
+  Object.values(fieldFilesByTool).forEach(m => Object.values(m).forEach(f => live.add(f)));
+  for (const [file, url] of previewUrls) {
+    if (!live.has(file)) { URL.revokeObjectURL(url); previewUrls.delete(file); }
+  }
+}
+
 function renderAll() { renderToolList(); renderWorkspace(); }
 
 // ================= API Key 弹窗 =================
@@ -529,16 +571,16 @@ async function fetchBalance() {
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + k },
       body: JSON.stringify({ apikey: k })
     });
-    const json = await resp.json();
+    const json = await parseRespJson(resp);
     if (json.code !== 0) throw new Error(json.msg || "查询失败");
     const d = json.data;
     const typeMap = { NORMAL: "消费级-会员", SHARED: "企业级-共享", EXCLUSIVE: "企业级-独占" };
-    box.innerHTML = "💰 <b>钱包余额：" + (d.remainMoney ?? "-") + " " + (d.currency || "") + "</b>" +
-      "　🪙 RH币：" + (d.remainCoins ?? "-") +
-      "　⏱ 运行中任务：" + (d.currentTaskCounts ?? "0") +
-      "　🏷 类型：" + (typeMap[d.apiType] || d.apiType || "-");
+    box.innerHTML = "💰 <b>钱包余额：" + esc(d.remainMoney ?? "-") + " " + esc(d.currency || "") + "</b>" +
+      "　🪙 RH币：" + esc(d.remainCoins ?? "-") +
+      "　⏱ 运行中任务：" + esc(d.currentTaskCounts ?? "0") +
+      "　🏷 类型：" + esc(typeMap[d.apiType] || d.apiType || "-");
   } catch (e) {
-    box.innerHTML = "💰 余额查询失败：" + e.message;
+    box.innerHTML = "💰 余额查询失败：" + esc(e.message);
   }
 }
 document.getElementById("saveKeyBtn").onclick = () => {
@@ -565,12 +607,12 @@ function renderFieldsEditor() {
     const row = document.createElement("div");
     row.className = "field-edit-row";
     row.innerHTML = `
-      <input type="text" data-k="label" placeholder="如：上传图片" value="${f.label || ""}">
+      <input type="text" data-k="label" placeholder="如：上传图片" value="${esc(f.label)}">
       <select data-k="type">${Object.keys(FIELD_TYPES).map(k =>
         `<option value="${k}" ${f.type === k ? "selected" : ""}>${FIELD_TYPES[k]}</option>`).join("")}</select>
-      <input type="text" data-k="nodeId" placeholder="如 1" value="${f.nodeId || ""}">
-      <input type="text" data-k="fieldName" placeholder="如 image" value="${f.fieldName || ""}">
-      <input type="text" data-k="def" placeholder="${f.type === "select" ? "选项1,选项2" : "可留空"}" value="${f.def || ""}">
+      <input type="text" data-k="nodeId" placeholder="如 1" value="${esc(f.nodeId)}">
+      <input type="text" data-k="fieldName" placeholder="如 image" value="${esc(f.fieldName)}">
+      <input type="text" data-k="def" placeholder="${f.type === "select" ? "选项1,选项2" : "可留空"}" value="${esc(f.def)}">
       <button class="del-field" title="删除">✕</button>`;
     row.querySelectorAll("[data-k]").forEach(inp => {
       inp.onchange = () => { f[inp.dataset.k] = inp.value.trim(); };
@@ -733,6 +775,14 @@ function authHeaders() {
   return { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey() };
 }
 
+// 接口响应兜底：HTTP 错误或非 JSON 响应统一抛出可读错误
+async function parseRespJson(resp) {
+  let json = null;
+  try { json = await resp.json(); } catch (e) { /* 非 JSON 响应 */ }
+  if (!resp.ok || json === null) throw new Error("服务器返回异常(HTTP " + resp.status + ")");
+  return json;
+}
+
 // 1. 上传图片，返回 fileName
 async function uploadImage(file) {
   const fd = new FormData();
@@ -742,7 +792,7 @@ async function uploadImage(file) {
     headers: { "Authorization": "Bearer " + apiKey() },
     body: fd
   });
-  const json = await resp.json();
+  const json = await parseRespJson(resp);
   if (json.code !== 0) throw new Error("图片上传失败：" + (json.message || json.msg || JSON.stringify(json)));
   return json.data.fileName;
 }
@@ -755,13 +805,14 @@ async function createTask(tool, nodeInfoList) {
     headers: authHeaders(),
     body: JSON.stringify({ nodeInfoList, instanceType: tool.instanceType || "default" })
   });
-  const json = await resp.json();
+  const json = await parseRespJson(resp);
   if (!json.taskId) throw new Error("任务创建失败：" + (json.errorMessage || json.message || JSON.stringify(json)));
   return json.taskId;
 }
 
 // 3. 轮询查询任务（v2 查询接口直接返回状态+结果）
 let currentRun = null;  // 当前运行中的任务 {taskId, cancelled}
+let runningToolId = null;  // 当前运行中任务所属的工具 id（用于阻止删除运行中的工具）
 async function waitTask(taskId, onTick) {
   for (let i = 0; i < 200; i++) {
     await new Promise(r => setTimeout(r, 3000));
@@ -771,7 +822,7 @@ async function waitTask(taskId, onTick) {
       headers: authHeaders(),
       body: JSON.stringify({ taskId: String(taskId) })
     });
-    const json = await resp.json();
+    const json = await parseRespJson(resp);
     onTick(json.status, i);
     if (json.status === "SUCCESS") return { results: json.results || [], usage: json.usage || {} };
     if (json.status === "FAILED") {
@@ -791,6 +842,7 @@ runBtn.onclick = async () => {
 
   runBtn.disabled = true;
   const runToolId = tool.id;  // 记录本次运行属于哪个工具，防止运行中切换工具后结果串位
+  runningToolId = runToolId;
   document.getElementById("resultArea").innerHTML = '<div class="result-placeholder">生成中…</div>';
   try {
     // 逐字段组装 nodeInfoList
@@ -828,19 +880,47 @@ runBtn.onclick = async () => {
       return;
     }
 
-    // 渲染结果：图片/视频显示缩略图，文本直接展示
-    const html = results.map(it => {
-      const url = it.url;
+    // 渲染结果：图片/视频显示缩略图，文本直接展示（DOM 构建防 XSS；url 仅接受 http/https）
+    const grid = document.createElement("div");
+    grid.className = "result-grid";
+    let hasOutput = false;
+    for (const it of results) {
+      const url = (typeof it.url === "string" && /^https?:\/\//i.test(it.url)) ? it.url : "";
       if (url && (it.outputType || "").match(/png|jpe?g|webp|gif|mp4|mov/i)) {
-        return `<div class="result-item"><img src="${url}"><div class="img-dim">📐 读取中…</div><a href="${url}" target="_blank" download>下载</a></div>`;
+        hasOutput = true;
+        const item = document.createElement("div");
+        item.className = "result-item";
+        const img = document.createElement("img");
+        img.src = url;
+        const dim = document.createElement("div");
+        dim.className = "img-dim";
+        dim.textContent = "📐 读取中…";
+        const a = document.createElement("a");
+        a.href = url; a.target = "_blank"; a.rel = "noopener"; a.download = "";
+        a.textContent = "下载";
+        item.append(img, dim, a);
+        grid.appendChild(item);
+      } else if (it.text) {
+        hasOutput = true;
+        const div = document.createElement("div");
+        div.className = "result-text";
+        div.textContent = it.text;
+        grid.appendChild(div);
+      } else if (url) {
+        hasOutput = true;
+        const div = document.createElement("div");
+        div.className = "result-text";
+        div.append("📎 ");
+        const a = document.createElement("a");
+        a.href = url; a.target = "_blank"; a.rel = "noopener"; a.style.color = "#5b8cff";
+        a.textContent = url;
+        div.appendChild(a);
+        grid.appendChild(div);
       }
-      if (it.text) return `<div class="result-text">${it.text}</div>`;
-      if (url) return `<div class="result-text">📎 <a href="${url}" target="_blank" style="color:#5b8cff">${url}</a></div>`;
-      return "";
-    }).join("");
+    }
     // 结果写入所属工具的存储；若用户还停留在该工具界面则直接更新显示
-    const resultHtml = html
-      ? '<div class="result-grid">' + html + "</div>"
+    const resultHtml = hasOutput
+      ? grid.outerHTML
       : '<div class="result-placeholder">任务成功但没有输出内容</div>';
     toolResults[runToolId] = resultHtml;
     if (activeId === runToolId) document.getElementById("resultArea").innerHTML = resultHtml;
@@ -872,7 +952,7 @@ runBtn.onclick = async () => {
         a.href = URL.createObjectURL(b);
         a.download = fname;
         a.click();
-        URL.revokeObjectURL(a.href);
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);  // 延迟回收，避免下载未开始就被释放
         downloaded++;
       } catch (e) { /* 自动下载失败时仍可点页面上的下载按钮 */ }
     }
@@ -895,6 +975,7 @@ runBtn.onclick = async () => {
     runBtn.disabled = false;
     document.getElementById("cancelBtn").style.display = "none";
     currentRun = null;
+    runningToolId = null;
   }
 };
 
@@ -1031,10 +1112,10 @@ window.addEventListener("mouseup", e => {
   document.getElementById("lbImg").style.cursor = "";
 });
 lightbox.addEventListener("click", e => {
-  if (e.target.id !== "lbDownload") lightbox.classList.remove("show");
+  if (e.target.id !== "lbDownload") { lightbox.classList.remove("show"); revokeUnusedPreviewUrls(); }
 });
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape") lightbox.classList.remove("show");
+  if (e.key === "Escape") { lightbox.classList.remove("show"); revokeUnusedPreviewUrls(); }
 });
 
 refreshKeyBtn();
@@ -1051,7 +1132,14 @@ renderAll();
     let changed = false;
     let n = 0;
     for (const f of files) {
-      const t = await (await fetch("tools/" + encodeURIComponent(f))).json();
+      let t;
+      try {
+        t = await (await fetch("tools/" + encodeURIComponent(f))).json();
+        if (!t || typeof t !== "object") throw new Error("配置格式不对");
+      } catch (e) {
+        showStatus("⚠️ 配置文件「" + f + "」损坏，已跳过加载", "error");  // 单个文件损坏不影响其余加载
+        continue;
+      }
       if (!t.id) t.id = "t" + Date.now() + "_" + n++;  // 配置文件没有 id 时自动补一个
       // 同应用ID或同名视为同一工具：以文件内容为准更新（保证 tools 目录是权威配置）
       const idx = tools.findIndex(x => (t.webappId && x.webappId === t.webappId) || (t.name && x.name === t.name));
