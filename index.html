@@ -989,12 +989,15 @@ async function saveToDir(name, blob) {
 // ================= 初始化 =================
 // 结果图点击预览（事件委托，兼容动态渲染的结果）
 const lightbox = document.getElementById("lightbox");
-let lbScale = 1;
+let lbScale = 1, lbX = 0, lbY = 0;
+function lbApply() {
+  document.getElementById("lbImg").style.transform =
+    "translate(" + lbX + "px," + lbY + "px) scale(" + lbScale + ")";
+}
 function openLightbox(url) {
-  lbScale = 1;
+  lbScale = 1; lbX = 0; lbY = 0;
   const img = document.getElementById("lbImg");
-  img.src = url;
-  img.style.transform = "scale(1)";
+  img.src = url; lbApply();
   document.getElementById("lbDownload").href = url;
   lightbox.classList.add("show");
 }
@@ -1006,8 +1009,27 @@ lightbox.addEventListener("wheel", e => {
   e.preventDefault();
   lbScale *= e.deltaY < 0 ? 1.15 : 1 / 1.15;
   lbScale = Math.min(10, Math.max(0.1, lbScale));
-  document.getElementById("lbImg").style.transform = "scale(" + lbScale + ")";
+  lbApply();
 }, { passive: false });
+// 中键拖动平移预览图
+let lbDrag = false, lbLastX = 0, lbLastY = 0;
+lightbox.addEventListener("mousedown", e => {
+  if (e.button !== 1) return;
+  e.preventDefault();  // 阻止浏览器中键自动滚动
+  lbDrag = true; lbLastX = e.clientX; lbLastY = e.clientY;
+  document.getElementById("lbImg").style.cursor = "grabbing";
+});
+window.addEventListener("mousemove", e => {
+  if (!lbDrag) return;
+  lbX += e.clientX - lbLastX; lbY += e.clientY - lbLastY;
+  lbLastX = e.clientX; lbLastY = e.clientY;
+  lbApply();
+});
+window.addEventListener("mouseup", e => {
+  if (e.button !== 1) return;
+  lbDrag = false;
+  document.getElementById("lbImg").style.cursor = "";
+});
 lightbox.addEventListener("click", e => {
   if (e.target.id !== "lbDownload") lightbox.classList.remove("show");
 });
