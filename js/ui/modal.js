@@ -77,6 +77,59 @@ export function openToolModal(toolId) {
   document.getElementById("toolModal").classList.add("show");
 }
 
+// ================= 初始设置向导 =================
+// 目录句柄当前是否已有 readwrite 权限（不触发授权弹窗）
+async function dirGranted(h) {
+  if (!h || !window.showDirectoryPicker) return false;
+  try { return (await h.queryPermission({ mode: "readwrite" })) === "granted"; }
+  catch (e) { return false; }
+}
+
+function setStepState(stepEl, statusEl, ok, dirName, isNext) {
+  stepEl.classList.toggle("next", !!isNext);
+  statusEl.className = "setup-step-status" + (ok ? " ok" : "");
+  statusEl.textContent = ok ? "✅ 已授权" + (dirName ? "（" + dirName + "）" : "") : "⚠️ 未授权";
+}
+
+// 刷新向导中两项授权状态，并高亮引导到下一个待授权项
+async function refreshSetupWizard() {
+  const supported = !!window.showDirectoryPicker;
+  const toolsOk = await toolsDirGranted();
+  const dlOk = await dirGranted(state.dirHandle);
+  const toolsBtn = document.getElementById("grantToolsDirBtn");
+  const dlBtn = document.getElementById("grantDownloadDirBtn");
+  if (!supported) {
+    // 浏览器不支持 File System Access：禁用授权按钮
+    toolsBtn.disabled = dlBtn.disabled = true;
+    document.getElementById("setupToolsDirStatus").textContent = "浏览器不支持";
+    document.getElementById("setupDownloadDirStatus").textContent = "浏览器不支持";
+    document.getElementById("setupDone").style.display = "none";
+    return;
+  }
+  const next = !toolsOk ? "tools" : (!dlOk ? "dl" : null);
+  setStepState(document.getElementById("setupStepToolsDir"), document.getElementById("setupToolsDirStatus"),
+    toolsOk, state.toolsDirHandle && state.toolsDirHandle.name, next === "tools");
+  setStepState(document.getElementById("setupStepDownloadDir"), document.getElementById("setupDownloadDirStatus"),
+    dlOk, state.dirHandle && state.dirHandle.name, next === "dl");
+  document.getElementById("setupDone").style.display = toolsOk && dlOk ? "" : "none";
+}
+
+// 绑定初始设置向导（grant 函数由入口传入，与顶栏/侧栏按钮共用同一套授权逻辑）
+export function initSetupWizard({ grantToolsDir, grantDownloadDir }) {
+  const modal = document.getElementById("setupModal");
+  document.getElementById("setupBtn").onclick = () => {
+    modal.classList.add("show");
+    refreshSetupWizard();
+  };
+  // 每步授权需各自的用户点击（浏览器限制，不能一次点击连弹两个选择器）
+  document.getElementById("grantToolsDirBtn").onclick = async () => {
+    if (await grantToolsDir()) refreshSetupWizard();
+  };
+  document.getElementById("grantDownloadDirBtn").onclick = async () => {
+    if (await grantDownloadDir()) refreshSetupWizard();
+  };
+}
+
 // 绑定两个弹窗的全部事件（renderAll 由入口传入，保存/删除/导入后整体重绘）
 export function initModals(renderAll) {
   const keyModal = document.getElementById("keyModal");

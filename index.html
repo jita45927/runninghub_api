@@ -12,6 +12,7 @@
 <div class="topbar">
   <div class="logo"><div class="logo-badge">🎨</div>RunningHub AI 工具箱</div>
   <div style="display:flex;gap:10px">
+    <button class="key-btn" id="setupBtn">🧭 初始设置</button>
     <button class="key-btn" id="dirBtn">📁 <span id="dirBtnText">下载目录：默认</span></button>
     <button class="key-btn" id="keyBtn"><span class="key-dot" id="keyDot"></span><span id="keyBtnText">API Key 未设置</span></button>
   </div>
@@ -148,6 +149,39 @@
       <div class="right">
         <button class="btn ghost" data-close="toolModal">取消</button>
         <button class="btn" id="saveToolBtn">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 初始设置向导弹窗 -->
+<div class="modal-mask" id="setupModal">
+  <div class="modal" style="width:560px">
+    <h3>🧭 初始设置</h3>
+    <div class="modal-sub">完成下面两项授权，工具配置和生成结果都会直接写入你的本地目录（两项需分别点击授权）</div>
+    <div class="setup-step" id="setupStepToolsDir">
+      <div class="setup-step-num">1</div>
+      <div class="setup-step-body">
+        <div class="setup-step-name">工具配置目录</div>
+        <div class="setup-step-desc">保存后配置直接写入该目录的 json 文件</div>
+      </div>
+      <div class="setup-step-status" id="setupToolsDirStatus">⚠️ 未授权</div>
+      <button class="btn ghost" id="grantToolsDirBtn">去授权</button>
+    </div>
+    <div class="setup-step" id="setupStepDownloadDir">
+      <div class="setup-step-num">2</div>
+      <div class="setup-step-body">
+        <div class="setup-step-name">下载目录</div>
+        <div class="setup-step-desc">生成结果自动保存到这里</div>
+      </div>
+      <div class="setup-step-status" id="setupDownloadDirStatus">⚠️ 未授权</div>
+      <button class="btn ghost" id="grantDownloadDirBtn">去授权</button>
+    </div>
+    <div class="setup-done" id="setupDone" style="display:none">🎉 设置完成</div>
+    <div class="modal-actions">
+      <div></div>
+      <div class="right">
+        <button class="btn ghost" data-close="setupModal">关闭</button>
       </div>
     </div>
   </div>
