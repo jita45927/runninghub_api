@@ -267,7 +267,14 @@
       <input type="text" id="tDesc" placeholder="一句话说明这个工具做什么">
     </div>
     <div class="field">
-      <label>AI 应用 ID（webappId，应用详情页 URL 或「API调用」中可见）</label>
+      <label>类型</label>
+      <select id="tToolType">
+        <option value="app">AI 应用</option>
+        <option value="workflow">ComfyUI 工作流</option>
+      </select>
+    </div>
+    <div class="field">
+      <label id="tWebappIdLabel">AI 应用 ID（webappId，应用详情页 URL 或「API调用」中可见）</label>
       <input type="text" id="tWebappId" placeholder="例如 2119272366319685634">
     </div>
 
@@ -529,6 +536,8 @@ function openToolModal(toolId) {
   document.getElementById("tName").value = t ? t.name : "";
   document.getElementById("tDesc").value = t ? t.desc : "";
   document.getElementById("tWebappId").value = t ? t.webappId : "";
+  document.getElementById("tToolType").value = t ? (t.toolType || "app") : "app";
+  document.getElementById("tToolType").dispatchEvent(new Event("change"));
   document.getElementById("tInstanceType").value = t ? (t.instanceType || "default") : "default";
   editingFields = t && t.fields ? JSON.parse(JSON.stringify(t.fields)) : [];
   renderFieldsEditor();
@@ -536,6 +545,12 @@ function openToolModal(toolId) {
   document.getElementById("exportToolBtn").style.display = t ? "" : "none";
   toolModal.classList.add("show");
 }
+// 类型切换时更新 ID 字段的说明文字
+document.getElementById("tToolType").onchange = e => {
+  document.getElementById("tWebappIdLabel").textContent = e.target.value === "workflow"
+    ? "工作流 ID（workflowId，工作流页面「API调用」中可见）"
+    : "AI 应用 ID（webappId，应用详情页 URL 或「API调用」中可见）";
+};
 document.getElementById("configToolBtn").onclick = () => { if (activeId) openToolModal(activeId); };
 document.getElementById("addToolBtn").onclick = () => openToolModal(null);
 
@@ -547,7 +562,7 @@ document.getElementById("exportToolBtn").onclick = () => {
   const data = {
     type: "runninghub-tool-config",
     version: 1,
-    name: t.name, icon: t.icon, desc: t.desc,
+    name: t.name, icon: t.icon, desc: t.desc, toolType: t.toolType || "app",
     webappId: t.webappId, instanceType: t.instanceType, fields: t.fields
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -575,6 +590,7 @@ document.getElementById("importFileInput").onchange = e => {
         name: data.name || file.name.replace(/\.rhtool\.json$/i, "").replace(/\.json$/i, ""),
         desc: data.desc || "",
         webappId: data.webappId || "",
+        toolType: data.toolType || "app",
         instanceType: data.instanceType || "default",
         fields: data.fields
       });
@@ -597,6 +613,7 @@ document.getElementById("saveToolBtn").onclick = () => {
     name: document.getElementById("tName").value.trim() || "未命名工具",
     desc: document.getElementById("tDesc").value.trim(),
     webappId: document.getElementById("tWebappId").value.trim(),
+    toolType: document.getElementById("tToolType").value,
     instanceType: document.getElementById("tInstanceType").value,
     fields: editingFields
   };
@@ -659,9 +676,10 @@ async function uploadImage(file) {
   return json.data.fileName;
 }
 
-// 2. 提交 AI 应用任务（nodeInfoList 由表单字段动态组装）
+// 2. 提交任务：AI 应用和 ComfyUI 工作流走不同的 v2 端点（nodeInfoList 由表单字段动态组装）
 async function createTask(tool, nodeInfoList) {
-  const resp = await fetch(base() + "/openapi/v2/run/ai-app/" + tool.webappId, {
+  const path = tool.toolType === "workflow" ? "/openapi/v2/run/workflow/" : "/openapi/v2/run/ai-app/";
+  const resp = await fetch(base() + path + tool.webappId, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify({ nodeInfoList, instanceType: tool.instanceType || "default" })
