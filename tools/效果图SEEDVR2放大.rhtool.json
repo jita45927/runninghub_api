@@ -5,7 +5,7 @@
   "name": "效果图SEEDVR2放大",
   "icon": "🔍",
   "desc": "上传效果图，SeedVR2 放大到目标分辨率",
-  "webappId": "",
+  "webappId": "2035302221096689666",
   "instanceType": "default",
   "fields": [
     { "label": "上传图片", "type": "image", "nodeId": "86", "fieldName": "image", "def": "" },
