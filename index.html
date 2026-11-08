@@ -199,6 +199,7 @@
       <div class="card-title">📝 输入参数</div>
       <div id="formArea"></div>
       <button class="btn" id="runBtn">🚀 开始生成</button>
+      <button class="btn" id="cancelBtn" style="background:var(--danger);color:#fff;display:none">⏹ 立即取消</button>
       <div class="status-bar" id="statusBar"></div>
     </div>
 
@@ -754,9 +755,11 @@ async function createTask(tool, nodeInfoList) {
 }
 
 // 3. 轮询查询任务（v2 查询接口直接返回状态+结果）
+let currentRun = null;  // 当前运行中的任务 {taskId, cancelled}
 async function waitTask(taskId, onTick) {
   for (let i = 0; i < 200; i++) {
     await new Promise(r => setTimeout(r, 3000));
+    if (currentRun && currentRun.cancelled) return { cancelled: true, results: [], usage: {} };
     const resp = await fetch(base() + "/openapi/v2/query", {
       method: "POST",
       headers: authHeaders(),
@@ -804,10 +807,20 @@ runBtn.onclick = async () => {
 
     showStatus("🚀 正在创建任务…");
     const taskId = await createTask(tool, nodeInfoList);
+    currentRun = { taskId, cancelled: false };
+    const cancelBtn = document.getElementById("cancelBtn");
+    cancelBtn.style.display = ""; cancelBtn.disabled = false;
     showStatus("⏳ 任务运行中（taskId: " + taskId + "）…");
-    const { results, usage } = await waitTask(taskId, (s, i) => {
+    const { results, usage, cancelled } = await waitTask(taskId, (s, i) => {
       showStatus("⏳ 任务状态：" + (s || "未知") + "（已等待 " + (i * 3 + 3) + " 秒）");
     });
+
+    if (cancelled) {
+      showStatus("⏹ 已取消，任务已停止", "");
+      toolResults[runToolId] = '<div class="result-placeholder">已取消</div>';
+      if (activeId === runToolId) document.getElementById("resultArea").innerHTML = toolResults[runToolId];
+      return;
+    }
 
     // 渲染结果：图片/视频显示缩略图，文本直接展示
     const html = results.map(it => {
@@ -874,7 +887,24 @@ runBtn.onclick = async () => {
     if (activeId === runToolId) document.getElementById("resultArea").innerHTML = toolResults[runToolId];
   } finally {
     runBtn.disabled = false;
+    document.getElementById("cancelBtn").style.display = "none";
+    currentRun = null;
   }
+};
+
+// 立即取消：停止本地轮询 + 通知 RunningHub 停止任务
+document.getElementById("cancelBtn").onclick = async () => {
+  if (!currentRun || currentRun.cancelled) return;
+  currentRun.cancelled = true;
+  document.getElementById("cancelBtn").disabled = true;
+  showStatus("⏹ 正在取消…");
+  try {
+    await fetch(base() + "/openapi/v2/cancel", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ taskId: String(currentRun.taskId) })
+    });
+  } catch (e) { /* 取消请求失败也不影响本地停止 */ }
 };
 
 // ================= 自定义下载目录（File System Access API） =================
