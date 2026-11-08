@@ -2,7 +2,7 @@
 import { LS, FIELD_TYPES, esc } from "../config.js";
 import { state, saveTools, saveActiveId } from "../store.js";
 import { getAccountStatus } from "../api.js";
-import { importToolFile, exportToolConfig, toolsDirGranted, writeToolToDir, deleteToolFromDir } from "../tools.js";
+import { importToolFile, toolsDirGranted, writeToolToDir, deleteToolFromDir } from "../tools.js";
 import { showStatus } from "./form.js";
 
 let editingToolId = null;
@@ -74,7 +74,6 @@ export function openToolModal(toolId) {
   editingFields = t && t.fields ? JSON.parse(JSON.stringify(t.fields)) : [];
   renderFieldsEditor();
   document.getElementById("deleteToolBtn").style.display = t ? "" : "none";
-  document.getElementById("exportToolBtn").style.display = t ? "" : "none";
   document.getElementById("toolModal").classList.add("show");
 }
 
@@ -116,11 +115,6 @@ export function initModals(renderAll) {
   document.getElementById("configToolBtn").onclick = () => { if (state.activeId) openToolModal(state.activeId); };
   document.getElementById("addToolBtn").onclick = () => openToolModal(null);
 
-  // 导出当前编辑的工具为一个 .json 配置文件（不含 API Key）
-  document.getElementById("exportToolBtn").onclick = () => {
-    const t = state.tools.find(x => x.id === editingToolId);
-    if (t) exportToolConfig(t);
-  };
   // 导入配置文件生成新工具
   document.getElementById("importToolBtn").onclick = () => document.getElementById("importFileInput").click();
   document.getElementById("importFileInput").onchange = e => {

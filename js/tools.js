@@ -12,16 +12,6 @@ function toolToConfigJSON(t) {
   }, null, 2);
 }
 
-// 导出工具为一个 .json 配置文件（不含 API Key）
-export function exportToolConfig(t) {
-  const blob = new Blob([toolToConfigJSON(t)], { type: "application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = (t.name || "tool") + ".rhtool.json";
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
 // 导入配置文件：同应用ID或同名工具 → 更新而不是新增
 export function importToolFile(file, renderAll) {
   const reader = new FileReader();
