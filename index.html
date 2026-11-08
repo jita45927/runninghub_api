@@ -873,6 +873,27 @@ document.addEventListener("keydown", e => {
 
 refreshKeyBtn();
 renderAll();
+
+// ============ 本地服务器模式：自动加载 tools 目录下所有配置文件 ============
+// file:// 双击打开时浏览器禁止读目录，此逻辑不生效，仍需手动导入
+(async () => {
+  if (!location.protocol.startsWith("http")) return;
+  try {
+    const html = await (await fetch("tools/")).text();
+    const files = [...html.matchAll(/href="([^"]+\.rhtool\.json)"/gi)]
+      .map(m => decodeURIComponent(m[1]).split("/").pop());
+    let changed = false;
+    for (const f of files) {
+      const t = await (await fetch("tools/" + encodeURIComponent(f))).json();
+      // 同 id 或同应用 ID 视为同一工具：以文件内容为准更新（保证 tools 目录是权威配置）
+      const idx = tools.findIndex(x => x.id === t.id || (t.webappId && x.webappId === t.webappId));
+      if (idx >= 0) { tools[idx] = { ...t, id: tools[idx].id }; }
+      else { tools.push(t); }
+      changed = true;
+    }
+    if (changed) { saveTools(); renderAll(); }
+  } catch (e) { /* tools 目录不存在或为空时忽略 */ }
+})();
 </script>
 </body>
 </html>
