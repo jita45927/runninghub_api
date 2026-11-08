@@ -342,7 +342,10 @@ const DEFAULT_TOOLS = [
 ];
 
 let tools = JSON.parse(localStorage.getItem(LS.tools) || "null") || DEFAULT_TOOLS;
+// 修正缺失 id 的工具（配置文件可能不带 id）
+tools.forEach((t, i) => { if (!t.id) t.id = "t" + Date.now() + "_" + i; });
 let activeId = localStorage.getItem(LS.active) || (tools[0] && tools[0].id);
+if (!tools.some(t => t.id === activeId)) activeId = tools[0] && tools[0].id;  // 修正失效的选中状态
 let editingToolId = null;
 let editingFields = [];      // 配置弹窗中正在编辑的字段数组
 let fieldFiles = {};         // 工作区各图片字段已选的 File 对象
@@ -929,8 +932,10 @@ renderAll();
     const files = [...html.matchAll(/href="([^"]+\.rhtool\.json)"/gi)]
       .map(m => decodeURIComponent(m[1]).split("/").pop());
     let changed = false;
+    let n = 0;
     for (const f of files) {
       const t = await (await fetch("tools/" + encodeURIComponent(f))).json();
+      if (!t.id) t.id = "t" + Date.now() + "_" + n++;  // 配置文件没有 id 时自动补一个
       // 同 id 或同应用 ID 视为同一工具：以文件内容为准更新（保证 tools 目录是权威配置）
       const idx = tools.findIndex(x => x.id === t.id || (t.webappId && x.webappId === t.webappId));
       if (idx >= 0) { tools[idx] = { ...t, id: tools[idx].id }; }
