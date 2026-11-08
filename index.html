@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RunningHub AI 工具箱</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0d1117; --panel: #161c2a; --panel2: #1c2436; --border: #2a3450;
+    --text: #e6e9f0; --muted: #8a93a8; --accent: #5b8cff; --green: #7fd4a8; --red: #ff7a7a;
+  }
+  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ===== 顶栏 ===== */
+  .topbar {
+    height: 56px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px; background: var(--panel); border-bottom: 1px solid var(--border);
+  }
+  .logo { font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .logo-badge { background: linear-gradient(135deg, #5b8cff, #9b5bff); width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 15px; }
+  .key-btn {
+    display: flex; align-items: center; gap: 8px; background: var(--panel2); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 13px;
+  }
+  .key-btn:hover { border-color: var(--accent); }
+  .key-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
+  .key-dot.ok { background: var(--green); }
+
+  /* ===== 主体布局 ===== */
+  .layout { flex: 1; display: flex; overflow: hidden; }
+
+  /* 左侧工具栏 */
+  .sidebar { width: 250px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+  .sidebar-title { padding: 16px 16px 10px; font-size: 12px; color: var(--muted); letter-spacing: 1px; }
+  .tool-list { flex: 1; overflow-y: auto; padding: 0 10px; }
+  .tool-item {
+    display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 10px;
+    cursor: pointer; margin-bottom: 6px; border: 1px solid transparent; transition: all .15s;
+  }
+  .tool-item:hover { background: var(--panel2); }
+  .tool-item.active { background: var(--panel2); border-color: var(--accent); }
+  .tool-icon { width: 38px; height: 38px; border-radius: 9px; background: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 19px; flex-shrink: 0; }
+  .tool-item.active .tool-icon { background: linear-gradient(135deg, #5b8cff33, #9b5bff33); }
+  .tool-meta { min-width: 0; }
+  .tool-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tool-desc { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tool-status { font-size: 10px; color: var(--red); }
+  .tool-status.ok { color: var(--green); }
+  .add-tool {
+    margin: 10px; padding: 12px; border: 1px dashed var(--border); border-radius: 10px;
+    text-align: center; color: var(--muted); cursor: pointer; font-size: 13px;
+  }
+  .add-tool:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* 右侧工作区 */
+  .workspace { flex: 1; overflow-y: auto; padding: 24px; }
+  .ws-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .ws-title { display: flex; align-items: center; gap: 14px; }
+  .ws-title .big-icon { font-size: 30px; }
+  .ws-title h2 { font-size: 20px; }
+  .ws-title p { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+  .btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 11px 26px; font-size: 14px; cursor: pointer; font-weight: 600; }
+  .btn:hover { opacity: .88; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn.ghost { background: var(--panel2); border: 1px solid var(--border); font-weight: 400; padding: 9px 18px; font-size: 13px; }
+  .btn.ghost:hover { border-color: var(--accent); }
+  .btn.danger { background: transparent; border: 1px solid var(--red); color: var(--red); font-weight: 400; padding: 9px 18px; font-size: 13px; }
+
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
+  .card-title { font-size: 14px; font-weight: 600; margin-bottom: 14px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
+  .card-title .note { font-size: 11px; font-weight: 400; color: #4a5470; }
+
+  .upload-area {
+    border: 2px dashed var(--border); border-radius: 12px; min-height: 150px;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    text-align: center; color: var(--muted); font-size: 13px; padding: 10px; transition: border-color .2s;
+  }
+  .upload-area:hover, .upload-area.dragover { border-color: var(--accent); }
+  .upload-area img { max-width: 100%; max-height: 260px; border-radius: 8px; }
+
+  textarea, input[type=text], input[type=password], input[type=number], select {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); padding: 10px 12px; font-size: 14px; outline: none; width: 100%; font-family: inherit;
+  }
+  textarea:focus, input:focus, select:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 80px; }
+  label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px; }
+  .field { margin-bottom: 14px; }
+  .field-row { display: flex; gap: 12px; }
+  .field-row .field { flex: 1; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+  .form-grid .span2 { grid-column: 1 / -1; }
+  @media (max-width: 900px) { .form-grid { grid-template-columns: 1fr; } }
+
+  .status-bar { margin-top: 14px; padding: 12px 14px; border-radius: 8px; background: var(--bg); font-size: 13px; color: var(--muted); display: none; }
+  .status-bar.show { display: block; }
+  .status-bar.error { color: var(--red); }
+  .status-bar.success { color: var(--green); }
+
+  .result-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+  .result-item { position: relative; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+  .result-item img { width: 100%; display: block; }
+  .result-item a { position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,.65); color: #fff; text-decoration: none; padding: 6px 14px; border-radius: 6px; font-size: 12px; }
+  .result-text { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px; font-size: 13px; color: var(--muted); white-space: pre-wrap; line-height: 1.7; }
+  .result-placeholder { min-height: 180px; display: flex; align-items: center; justify-content: center; color: #4a5470; font-size: 14px; border: 1px dashed var(--border); border-radius: 12px; }
+
+  /* ===== 弹窗 ===== */
+  .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(3px); }
+  .modal-mask.show { display: flex; }
+  .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; width: 720px; max-width: 94vw; max-height: 88vh; overflow-y: auto; padding: 24px; }
+  .modal h3 { font-size: 17px; margin-bottom: 4px; }
+  .modal .modal-sub { font-size: 12px; color: var(--muted); margin-bottom: 18px; line-height: 1.6; }
+  .modal-actions { display: flex; justify-content: space-between; gap: 10px; margin-top: 20px; }
+  .modal-actions .right { display: flex; gap: 10px; }
+
+  .security-note {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; font-size: 12px; color: var(--muted); line-height: 1.7; margin-top: 14px;
+  }
+  .security-note b { color: var(--green); }
+
+  /* 字段编辑器 */
+  .fields-head, .field-edit-row {
+    display: grid; grid-template-columns: 1.1fr .95fr .6fr .7fr .9fr 30px; gap: 8px;
+    align-items: center; margin-bottom: 8px;
+  }
+  .fields-head { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  .field-edit-row input, .field-edit-row select { padding: 8px 10px; font-size: 12px; }
+  .del-field { background: none; border: none; color: var(--red); cursor: pointer; font-size: 15px; padding: 4px; }
+  .add-field-btn {
+    width: 100%; padding: 9px; border: 1px dashed var(--border); border-radius: 8px;
+    background: none; color: var(--muted); cursor: pointer; font-size: 12px; margin-top: 4px;
+  }
+  .add-field-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ===== 图片预览灯箱 ===== */
+  .lightbox {
+    position: fixed; inset: 0; background: rgba(0,0,0,.88); z-index: 200;
+    display: none; align-items: center; justify-content: center; cursor: zoom-out;
+  }
+  .lightbox.show { display: flex; }
+  .lightbox img { max-width: 92vw; max-height: 86vh; border-radius: 10px; box-shadow: 0 8px 60px rgba(0,0,0,.6); }
+  .lightbox .lb-bar {
+    position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 12px; align-items: center;
+    background: rgba(20,26,40,.9); border: 1px solid var(--border);
+    padding: 10px 18px; border-radius: 10px; font-size: 13px; color: var(--muted);
+  }
+  .lightbox .lb-bar a { color: #fff; background: var(--accent); text-decoration: none; padding: 7px 18px; border-radius: 7px; }
+  .result-item img { cursor: zoom-in; }
+</style>
+</head>
+<body>
+
+<!-- 顶栏 -->
+<div class="topbar">
+  <div class="logo"><div class="logo-badge">🎨</div>RunningHub AI 工具箱</div>
+  <div style="display:flex;gap:10px">
+    <button class="key-btn" id="dirBtn">📁 <span id="dirBtnText">下载目录：默认</span></button>
+    <button class="key-btn" id="keyBtn"><span class="key-dot" id="keyDot"></span><span id="keyBtnText">API Key 未设置</span></button>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- 左侧工具列表 -->
+  <div class="sidebar">
+    <div class="sidebar-title">我的工具</div>
+    <div class="tool-list" id="toolList"></div>
+    <div class="add-tool" id="addToolBtn">＋ 添加工具</div>
+    <div class="add-tool" id="importToolBtn" style="margin-top:0">📥 导入配置文件</div>
+    <input type="file" id="importFileInput" accept=".json" style="display:none">
+  </div>
+
+  <!-- 右侧工作区 -->
+  <div class="workspace">
+    <div class="ws-header">
+      <div class="ws-title">
+        <div class="big-icon" id="wsIcon">🖼️</div>
+        <div>
+          <h2 id="wsName">请选择工具</h2>
+          <p id="wsDesc">从左侧选择一个工具开始使用</p>
+        </div>
+      </div>
+      <button class="btn ghost" id="configToolBtn">⚙️ 配置此工具</button>
+    </div>
+
+    <!-- 动态表单区 -->
+    <div class="card">
+      <div class="card-title">📝 输入参数</div>
+      <div id="formArea"></div>
+      <button class="btn" id="runBtn">🚀 开始生成</button>
+      <div class="status-bar" id="statusBar"></div>
+    </div>
+
+    <!-- 结果区 -->
+    <div class="card">
+      <div class="card-title">🖼️ 生成结果<span class="note">结果链接 24 小时内有效，请及时下载保存</span></div>
+      <div id="resultArea"><div class="result-placeholder">生成的内容会显示在这里</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- API Key 弹窗 -->
+<div class="modal-mask" id="keyModal">
+  <div class="modal" style="width:520px">
+    <h3>🔑 API Key 设置</h3>
+    <div class="modal-sub">Key 用于调用 RunningHub 接口，只需设置一次</div>
+    <div class="field">
+      <label>站点</label>
+      <select id="site">
+        <option value="https://www.runninghub.cn">国内站 runninghub.cn</option>
+        <option value="https://www.runninghub.ai">国际站 runninghub.ai</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>API Key（RunningHub 控制台获取，32位）</label>
+      <input type="password" id="apiKey" placeholder="粘贴你的 API Key">
+    </div>
+    <div class="security-note" id="balanceInfo" style="display:none"></div>
+    <div class="security-note">
+      🔒 <b>安全说明</b>：Key 仅保存在<b>你自己浏览器</b>的 localStorage 中，不写入本文件、不上传到任何第三方；
+      使用时只通过 HTTPS 发送给 RunningHub 官方接口。<br>
+      · 把这个 HTML 文件发给别人，不会带走你的 Key；<br>
+      · 在公用电脑上使用，用完请点「清除 Key」；<br>
+      · 怀疑泄露时，到 RunningHub 控制台重置 Key 即可。
+    </div>
+    <div class="modal-actions">
+      <button class="btn danger" id="clearKeyBtn">清除 Key</button>
+      <div class="right">
+        <button class="btn ghost" data-close="keyModal">取消</button>
+        <button class="btn" id="saveKeyBtn">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 工具配置弹窗 -->
+<div class="modal-mask" id="toolModal">
+  <div class="modal">
+    <h3 id="toolModalTitle">⚙️ 配置工具</h3>
+    <div class="modal-sub">
+      每个工具对应一个 RunningHub AI 应用。打开应用详情页点「API 调用」，把示例中 nodeInfoList 的每个节点，
+      在下面添加为对应的输入项（节点 ID 和字段名照抄即可）。
+    </div>
+    <div class="field-row">
+      <div class="field" style="flex:0 0 90px">
+        <label>图标</label>
+        <input type="text" id="tIcon" placeholder="🖼️" maxlength="4">
+      </div>
+      <div class="field">
+        <label>工具名称</label>
+        <input type="text" id="tName" placeholder="例如：SU 草图转写实照片">
+      </div>
+      <div class="field" style="flex:0 0 130px">
+        <label>实例类型</label>
+        <select id="tInstanceType">
+          <option value="default">default (24G)</option>
+          <option value="plus">plus (48G)</option>
+          <option value="ultra">ultra (84G)</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label>功能描述</label>
+      <input type="text" id="tDesc" placeholder="一句话说明这个工具做什么">
+    </div>
+    <div class="field">
+      <label>AI 应用 ID（webappId，应用详情页 URL 或「API调用」中可见）</label>
+      <input type="text" id="tWebappId" placeholder="例如 2119272366319685634">
+    </div>
+
+    <label style="margin-bottom:8px">输入项（决定工具界面显示什么表单）</label>
+    <div class="fields-head">
+      <span>显示名称</span><span>类型</span><span>节点ID</span><span>字段名</span><span>默认值/选项</span><span></span>
+    </div>
+    <div id="fieldsEditor"></div>
+    <button class="add-field-btn" id="addFieldBtn">＋ 添加输入项</button>
+
+    <div class="modal-actions">
+      <div style="display:flex;gap:10px">
+        <button class="btn danger" id="deleteToolBtn">删除此工具</button>
+        <button class="btn ghost" id="exportToolBtn">📤 导出配置</button>
+      </div>
+      <div class="right">
+        <button class="btn ghost" data-close="toolModal">取消</button>
+        <button class="btn" id="saveToolBtn">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 图片预览灯箱 -->
+<div class="lightbox" id="lightbox">
+  <img id="lbImg" src="">
+  <div class="lb-bar">
+    <span>点击空白处关闭</span>
+    <a id="lbDownload" href="" target="_blank" download>下载原图</a>
+  </div>
+</div>
+
+<script>
+// ================= 数据层 =================
+// 注意：本文件不含任何 API Key 和用户配置。
+// API Key 只保存在浏览器 localStorage；工具配置通过「导出/导入 .json 文件」迁移。
+const LS = { key: "rh_apikey", site: "rh_site", tools: "rh_tools_v4", active: "rh_active_v4" };
+
+// 字段类型定义
+const FIELD_TYPES = {
+  image:    "图片上传",
+  textarea: "多行文本",
+  text:     "单行文本",
+  number:   "数字",
+  select:   "下拉选择"
+};
+
+// 内置占位示例（不含真实应用数据，导入配置文件后可替换或删除）
+const DEFAULT_TOOLS = [
+  {
+    id: "t1", icon: "🧩", name: "示例工具", desc: "点「配置此工具」填入你的应用信息，或从左侧导入配置文件",
+    webappId: "", instanceType: "default",
+    fields: [
+      { label: "上传图片", type: "image", nodeId: "", fieldName: "image", def: "" },
+      { label: "提示词", type: "textarea", nodeId: "", fieldName: "text", def: "" }
+    ]
+  }
+];
+
+let tools = JSON.parse(localStorage.getItem(LS.tools) || "null") || DEFAULT_TOOLS;
+let activeId = localStorage.getItem(LS.active) || (tools[0] && tools[0].id);
+let editingToolId = null;
+let editingFields = [];      // 配置弹窗中正在编辑的字段数组
+let fieldFiles = {};         // 工作区各图片字段已选的 File 对象
+
+function saveTools() { localStorage.setItem(LS.tools, JSON.stringify(tools)); }
+function activeTool() { return tools.find(t => t.id === activeId); }
+
+// ================= 左侧工具列表 =================
+function renderToolList() {
+  const list = document.getElementById("toolList");
+  list.innerHTML = "";
+  tools.forEach(t => {
+    const configured = t.webappId && t.fields && t.fields.length && t.fields.every(f => f.nodeId);
+    const el = document.createElement("div");
+    el.className = "tool-item" + (t.id === activeId ? " active" : "");
+    el.innerHTML = `
+      <div class="tool-icon">${t.icon || "🧩"}</div>
+      <div class="tool-meta">
+        <div class="tool-name">${t.name || "未命名"}</div>
+        <div class="tool-desc">${t.desc || ""}</div>
+        <div class="tool-status ${configured ? "ok" : ""}">${configured ? "● 已配置" : "○ 待配置"}</div>
+      </div>`;
+    el.onclick = () => { activeId = t.id; localStorage.setItem(LS.active, activeId); renderAll(); };
+    list.appendChild(el);
+  });
+}
+
+// ================= 工作区：按字段配置动态生成表单 =================
+function renderWorkspace() {
+  const t = activeTool();
+  document.getElementById("wsIcon").textContent = t ? (t.icon || "🧩") : "🖼️";
+  document.getElementById("wsName").textContent = t ? t.name : "请选择工具";
+  document.getElementById("wsDesc").textContent = t ? (t.desc || "点击右上角「配置此工具」完善参数") : "从左侧选择一个工具开始使用";
+
+  fieldFiles = {};
+  const form = document.getElementById("formArea");
+  if (!t || !t.fields || !t.fields.length) {
+    form.innerHTML = '<div style="color:#4a5470;font-size:13px;padding:8px 0">此工具还没有输入项，点右上角「配置此工具」添加。</div>';
+    return;
+  }
+
+  form.innerHTML = '<div class="form-grid">' + t.fields.map((f, i) => {
+    const span = (f.type === "textarea" || f.type === "image") ? " span2" : "";
+    if (f.type === "image") {
+      return `<div class="field${span}">
+        <label>${f.label}</label>
+        <div class="upload-area" id="ua_${i}"><span>点击选择或拖拽图片到这里<br><small style="color:#4a5470">JPG / PNG / WEBP，≤30MB</small></span></div>
+        <input type="file" id="fi_${i}" accept="image/*" style="display:none">
+      </div>`;
+    }
+    if (f.type === "textarea") {
+      return `<div class="field${span}"><label>${f.label}</label><textarea id="ff_${i}" placeholder="${f.def ? "" : "请输入"}">${f.def || ""}</textarea></div>`;
+    }
+    if (f.type === "select") {
+      const opts = (f.def || "").split(",").map(s => s.trim()).filter(Boolean);
+      return `<div class="field${span}"><label>${f.label}</label>
+        <select id="ff_${i}">${opts.map(o => `<option value="${o}">${o}</option>`).join("")}</select></div>`;
+    }
+    const inputType = f.type === "number" ? "number" : "text";
+    return `<div class="field${span}"><label>${f.label}</label><input type="${inputType}" id="ff_${i}" value="${f.def || ""}"></div>`;
+  }).join("") + "</div>";
+
+  // 给图片字段绑定事件
+  t.fields.forEach((f, i) => {
+    if (f.type !== "image") return;
+    const ua = document.getElementById("ua_" + i);
+    const fi = document.getElementById("fi_" + i);
+    ua.onclick = () => pickImageField(i, fi);
+    fi.onchange = e => { if (e.target.files[0]) pickFile(i, e.target.files[0]); };
+    ua.ondragover = e => { e.preventDefault(); ua.classList.add("dragover"); };
+    ua.ondragleave = () => ua.classList.remove("dragover");
+    ua.ondrop = e => {
+      e.preventDefault(); ua.classList.remove("dragover");
+      if (e.dataTransfer.files[0]) pickFile(i, e.dataTransfer.files[0]);
+    };
+  });
+}
+
+// 用文件系统API选择图片：通过 startIn 记住并打开上次选择的目录
+let lastImgHandle = null;
+async function pickImageField(i, fi) {
+  if (!window.showOpenFilePicker) { fi.click(); return; }  // 老浏览器回退原生选择框
+  try {
+    const opts = {
+      types: [{ description: "图片", accept: { "image/*": [".png", ".jpg", ".jpeg", ".webp", ".gif"] } }],
+      multiple: false
+    };
+    if (lastImgHandle) opts.startIn = lastImgHandle;  // 打开上次选图所在目录
+    const [h] = await showOpenFilePicker(opts);
+    lastImgHandle = h;
+    idbSet("lastImg", h).catch(() => {});  // 记住这次的文件位置
+    pickFile(i, await h.getFile());
+  } catch (e) { /* 用户取消选择 */ }
+}
+
+function pickFile(fieldIdx, file) {
+  if (!file.type.startsWith("image/")) { showStatus("请选择图片文件", "error"); return; }
+  if (file.size > 30 * 1024 * 1024) { showStatus("图片不能超过 30MB", "error"); return; }
+  fieldFiles[fieldIdx] = file;
+  const reader = new FileReader();
+  reader.onload = ev => { document.getElementById("ua_" + fieldIdx).innerHTML = `<img src="${ev.target.result}">`; };
+  reader.readAsDataURL(file);
+}
+
+function renderAll() { renderToolList(); renderWorkspace(); }
+
+// ================= API Key 弹窗 =================
+const keyModal = document.getElementById("keyModal");
+function refreshKeyBtn() {
+  const has = !!localStorage.getItem(LS.key);
+  document.getElementById("keyDot").className = "key-dot" + (has ? " ok" : "");
+  document.getElementById("keyBtnText").textContent = has ? "API Key 已设置" : "API Key 未设置";
+}
+document.getElementById("keyBtn").onclick = () => {
+  document.getElementById("apiKey").value = localStorage.getItem(LS.key) || "";
+  document.getElementById("site").value = localStorage.getItem(LS.site) || "https://www.runninghub.cn";
+  keyModal.classList.add("show");
+  fetchBalance();
+};
+
+// 查询账户余额
+async function fetchBalance() {
+  const box = document.getElementById("balanceInfo");
+  const k = document.getElementById("apiKey").value.trim();
+  if (!k) { box.style.display = "none"; return; }
+  box.style.display = "";
+  box.innerHTML = "💰 正在查询账户余额…";
+  try {
+    const resp = await fetch(base() + "/uc/openapi/accountStatus", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + k },
+      body: JSON.stringify({ apikey: k })
+    });
+    const json = await resp.json();
+    if (json.code !== 0) throw new Error(json.msg || "查询失败");
+    const d = json.data;
+    const typeMap = { NORMAL: "消费级-会员", SHARED: "企业级-共享", EXCLUSIVE: "企业级-独占" };
+    box.innerHTML = "💰 <b>钱包余额：" + (d.remainMoney ?? "-") + " " + (d.currency || "") + "</b>" +
+      "　🪙 RH币：" + (d.remainCoins ?? "-") +
+      "　⏱ 运行中任务：" + (d.currentTaskCounts ?? "0") +
+      "　🏷 类型：" + (typeMap[d.apiType] || d.apiType || "-");
+  } catch (e) {
+    box.innerHTML = "💰 余额查询失败：" + e.message;
+  }
+}
+document.getElementById("saveKeyBtn").onclick = () => {
+  const k = document.getElementById("apiKey").value.trim();
+  if (k) localStorage.setItem(LS.key, k);
+  localStorage.setItem(LS.site, document.getElementById("site").value);
+  keyModal.classList.remove("show");
+  refreshKeyBtn();
+};
+document.getElementById("clearKeyBtn").onclick = () => {
+  localStorage.removeItem(LS.key);
+  document.getElementById("apiKey").value = "";
+  refreshKeyBtn();
+  keyModal.classList.remove("show");
+};
+
+// ================= 工具配置弹窗（含字段编辑器） =================
+const toolModal = document.getElementById("toolModal");
+
+function renderFieldsEditor() {
+  const box = document.getElementById("fieldsEditor");
+  box.innerHTML = "";
+  editingFields.forEach((f, i) => {
+    const row = document.createElement("div");
+    row.className = "field-edit-row";
+    row.innerHTML = `
+      <input type="text" data-k="label" placeholder="如：上传图片" value="${f.label || ""}">
+      <select data-k="type">${Object.keys(FIELD_TYPES).map(k =>
+        `<option value="${k}" ${f.type === k ? "selected" : ""}>${FIELD_TYPES[k]}</option>`).join("")}</select>
+      <input type="text" data-k="nodeId" placeholder="如 1" value="${f.nodeId || ""}">
+      <input type="text" data-k="fieldName" placeholder="如 image" value="${f.fieldName || ""}">
+      <input type="text" data-k="def" placeholder="${f.type === "select" ? "选项1,选项2" : "可留空"}" value="${f.def || ""}">
+      <button class="del-field" title="删除">✕</button>`;
+    row.querySelectorAll("[data-k]").forEach(inp => {
+      inp.onchange = () => { f[inp.dataset.k] = inp.value.trim(); };
+    });
+    row.querySelector(".del-field").onclick = () => {
+      editingFields.splice(i, 1);
+      renderFieldsEditor();
+    };
+    box.appendChild(row);
+  });
+}
+
+document.getElementById("addFieldBtn").onclick = () => {
+  editingFields.push({ label: "", type: "textarea", nodeId: "", fieldName: "", def: "" });
+  renderFieldsEditor();
+};
+
+function openToolModal(toolId) {
+  editingToolId = toolId;
+  const t = tools.find(x => x.id === toolId);
+  document.getElementById("toolModalTitle").textContent = t ? "⚙️ 配置工具" : "＋ 添加工具";
+  document.getElementById("tIcon").value = t ? t.icon : "";
+  document.getElementById("tName").value = t ? t.name : "";
+  document.getElementById("tDesc").value = t ? t.desc : "";
+  document.getElementById("tWebappId").value = t ? t.webappId : "";
+  document.getElementById("tInstanceType").value = t ? (t.instanceType || "default") : "default";
+  editingFields = t && t.fields ? JSON.parse(JSON.stringify(t.fields)) : [];
+  renderFieldsEditor();
+  document.getElementById("deleteToolBtn").style.display = t ? "" : "none";
+  document.getElementById("exportToolBtn").style.display = t ? "" : "none";
+  toolModal.classList.add("show");
+}
+document.getElementById("configToolBtn").onclick = () => { if (activeId) openToolModal(activeId); };
+document.getElementById("addToolBtn").onclick = () => openToolModal(null);
+
+// ================= 配置导入 / 导出（不含 API Key） =================
+// 导出当前编辑的工具为一个 .json 配置文件
+document.getElementById("exportToolBtn").onclick = () => {
+  const t = tools.find(x => x.id === editingToolId);
+  if (!t) return;
+  const data = {
+    type: "runninghub-tool-config",
+    version: 1,
+    name: t.name, icon: t.icon, desc: t.desc,
+    webappId: t.webappId, instanceType: t.instanceType, fields: t.fields
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = (t.name || "tool") + ".rhtool.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+// 导入配置文件生成新工具
+document.getElementById("importToolBtn").onclick = () => document.getElementById("importFileInput").click();
+document.getElementById("importFileInput").onchange = e => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (!data || !Array.isArray(data.fields)) throw new Error("文件格式不对");
+      tools.push({
+        id: "t" + Date.now(),
+        icon: data.icon || "🧩",
+        name: data.name || file.name.replace(/\.rhtool\.json$/i, "").replace(/\.json$/i, ""),
+        desc: data.desc || "",
+        webappId: data.webappId || "",
+        instanceType: data.instanceType || "default",
+        fields: data.fields
+      });
+      saveTools();
+      renderAll();
+    } catch (err) {
+      alert("导入失败：" + err.message);
+    }
+  };
+  reader.readAsText(file);
+};
+
+document.getElementById("saveToolBtn").onclick = () => {
+  // 触发未失焦输入框的 onchange，确保数据已收集
+  document.querySelectorAll("#fieldsEditor [data-k]").forEach(inp => inp.dispatchEvent(new Event("change")));
+  const bad = editingFields.find(f => !f.label || !f.nodeId || !f.fieldName);
+  if (bad) { alert("有输入项的「显示名称 / 节点ID / 字段名」没填完整，请检查"); return; }
+  const data = {
+    icon: document.getElementById("tIcon").value.trim() || "🧩",
+    name: document.getElementById("tName").value.trim() || "未命名工具",
+    desc: document.getElementById("tDesc").value.trim(),
+    webappId: document.getElementById("tWebappId").value.trim(),
+    instanceType: document.getElementById("tInstanceType").value,
+    fields: editingFields
+  };
+  if (editingToolId) {
+    Object.assign(tools.find(x => x.id === editingToolId), data);
+  } else {
+    data.id = "t" + Date.now();
+    tools.push(data);
+    activeId = data.id;
+  }
+  saveTools();
+  localStorage.setItem(LS.active, activeId);
+  toolModal.classList.remove("show");
+  renderAll();
+};
+document.getElementById("deleteToolBtn").onclick = () => {
+  if (!editingToolId) return;
+  if (!confirm("确定删除这个工具吗？")) return;
+  tools = tools.filter(x => x.id !== editingToolId);
+  if (activeId === editingToolId) activeId = tools[0] && tools[0].id;
+  saveTools();
+  localStorage.setItem(LS.active, activeId || "");
+  toolModal.classList.remove("show");
+  renderAll();
+};
+
+// 弹窗通用关闭
+document.querySelectorAll("[data-close]").forEach(b => {
+  b.onclick = () => document.getElementById(b.dataset.close).classList.remove("show");
+});
+document.querySelectorAll(".modal-mask").forEach(m => {
+  m.onclick = e => { if (e.target === m) m.classList.remove("show"); };
+});
+
+// ================= 状态栏 =================
+const statusBar = document.getElementById("statusBar");
+function showStatus(text, type) {
+  statusBar.className = "status-bar show" + (type ? " " + type : "");
+  statusBar.textContent = text;
+}
+
+// ================= RunningHub v2 API =================
+function base() { return localStorage.getItem(LS.site) || "https://www.runninghub.cn"; }
+function apiKey() { return localStorage.getItem(LS.key) || ""; }
+function authHeaders() {
+  return { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey() };
+}
+
+// 1. 上传图片，返回 fileName
+async function uploadImage(file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const resp = await fetch(base() + "/openapi/v2/media/upload/binary", {
+    method: "POST",
+    headers: { "Authorization": "Bearer " + apiKey() },
+    body: fd
+  });
+  const json = await resp.json();
+  if (json.code !== 0) throw new Error("图片上传失败：" + (json.message || json.msg || JSON.stringify(json)));
+  return json.data.fileName;
+}
+
+// 2. 提交 AI 应用任务（nodeInfoList 由表单字段动态组装）
+async function createTask(tool, nodeInfoList) {
+  const resp = await fetch(base() + "/openapi/v2/run/ai-app/" + tool.webappId, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ nodeInfoList, instanceType: tool.instanceType || "default" })
+  });
+  const json = await resp.json();
+  if (!json.taskId) throw new Error("任务创建失败：" + (json.errorMessage || json.message || JSON.stringify(json)));
+  return json.taskId;
+}
+
+// 3. 轮询查询任务（v2 查询接口直接返回状态+结果）
+async function waitTask(taskId, onTick) {
+  for (let i = 0; i < 200; i++) {
+    await new Promise(r => setTimeout(r, 3000));
+    const resp = await fetch(base() + "/openapi/v2/query", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ taskId: String(taskId) })
+    });
+    const json = await resp.json();
+    onTick(json.status, i);
+    if (json.status === "SUCCESS") return { results: json.results || [], usage: json.usage || {} };
+    if (json.status === "FAILED") {
+      throw new Error("任务执行失败：" + (json.errorMessage || "请到 RunningHub 控制台查看详情"));
+    }
+  }
+  throw new Error("等待超时（10分钟），任务可能仍在运行，可稍后到官网查看");
+}
+
+// ================= 主流程 =================
+const runBtn = document.getElementById("runBtn");
+runBtn.onclick = async () => {
+  const tool = activeTool();
+  if (!apiKey()) { showStatus("请先点击右上角设置 API Key", "error"); return; }
+  if (!tool) { showStatus("请先在左侧选择一个工具", "error"); return; }
+  if (!tool.webappId) { showStatus("当前工具未填写应用 ID，请点击右上角「配置此工具」", "error"); return; }
+
+  runBtn.disabled = true;
+  document.getElementById("resultArea").innerHTML = '<div class="result-placeholder">生成中…</div>';
+  try {
+    // 逐字段组装 nodeInfoList
+    const nodeInfoList = [];
+    for (let i = 0; i < tool.fields.length; i++) {
+      const f = tool.fields[i];
+      if (f.type === "image") {
+        if (!fieldFiles[i]) throw new Error("请上传「" + f.label + "」");
+        showStatus("⏫ 正在上传「" + f.label + "」…");
+        const fileName = await uploadImage(fieldFiles[i]);
+        nodeInfoList.push({ nodeId: f.nodeId, fieldName: f.fieldName, fieldValue: fileName });
+      } else {
+        const el = document.getElementById("ff_" + i);
+        const v = el ? el.value.trim() : "";
+        const val = v !== "" ? v : (f.def || "");
+        if (val !== "") nodeInfoList.push({ nodeId: f.nodeId, fieldName: f.fieldName, fieldValue: val });
+      }
+    }
+    if (!nodeInfoList.length) throw new Error("没有可提交的参数，请检查工具配置");
+
+    showStatus("🚀 正在创建任务…");
+    const taskId = await createTask(tool, nodeInfoList);
+    showStatus("⏳ 任务运行中（taskId: " + taskId + "）…");
+    const { results, usage } = await waitTask(taskId, (s, i) => {
+      showStatus("⏳ 任务状态：" + (s || "未知") + "（已等待 " + (i * 3 + 3) + " 秒）");
+    });
+
+    // 渲染结果：图片/视频显示缩略图，文本直接展示
+    const html = results.map(it => {
+      const url = it.url;
+      if (url && (it.outputType || "").match(/png|jpe?g|webp|gif|mp4|mov/i)) {
+        return `<div class="result-item"><img src="${url}"><a href="${url}" target="_blank" download>下载</a></div>`;
+      }
+      if (it.text) return `<div class="result-text">${it.text}</div>`;
+      if (url) return `<div class="result-text">📎 <a href="${url}" target="_blank" style="color:#5b8cff">${url}</a></div>`;
+      return "";
+    }).join("");
+    document.getElementById("resultArea").innerHTML = html
+      ? '<div class="result-grid">' + html + "</div>"
+      : '<div class="result-placeholder">任务成功但没有输出内容</div>';
+    // 自动下载结果原图到本地（避免24小时后链接过期丢失）
+    let downloaded = 0;
+    for (let idx = 0; idx < results.length; idx++) {
+      const it = results[idx];
+      if (!it.url || !(it.outputType || "").match(/png|jpe?g|webp|gif|mp4|mov/i)) continue;
+      try {
+        const r = await fetch(it.url);
+        const b = await r.blob();
+        const fname = (tool.name || "result") + "_" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")
+          + (results.length > 1 ? "_" + (idx + 1) : "") + "." + (it.outputType || "png");
+        // 已设置自定义目录：静默写入，不弹任何窗口
+        if (dirHandle && (await dirHandle.queryPermission({ mode: "readwrite" })) === "granted") {
+          try { await saveToDir(fname, b); downloaded++; continue; } catch (e) {}
+        }
+        // 否则走浏览器默认下载（受浏览器下载设置控制）
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(b);
+        a.download = fname;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        downloaded++;
+      } catch (e) { /* 自动下载失败时仍可点页面上的下载按钮 */ }
+    }
+    // 组装扣费信息
+    let costText = "✅ 生成完成！共 " + results.length + " 个输出";
+    if (downloaded) costText += "，已自动下载 " + downloaded + " 个文件到「" + (dirHandle ? dirHandle.name : "浏览器下载目录") + "」";
+    if (usage && (usage.consumeMoney || usage.consumeCoins || usage.taskCostTime)) {
+      const parts = [];
+      if (usage.taskCostTime) parts.push("耗时 " + usage.taskCostTime + " 秒");
+      if (usage.consumeMoney && usage.consumeMoney !== "0") parts.push("扣费 ¥" + usage.consumeMoney);
+      if (usage.consumeCoins && usage.consumeCoins !== "0") parts.push("消耗 " + usage.consumeCoins + " RH币");
+      if (parts.length) costText += "（" + parts.join("，") + "）";
+    }
+    showStatus(costText + "。链接24小时内有效，请及时下载", "success");
+  } catch (err) {
+    showStatus("❌ " + err.message, "error");
+    document.getElementById("resultArea").innerHTML = '<div class="result-placeholder">生成失败</div>';
+  } finally {
+    runBtn.disabled = false;
+  }
+};
+
+// ================= 自定义下载目录（File System Access API） =================
+let dirHandle = null;
+
+// 极简 IndexedDB 封装，用于记住用户选择的目录
+function idb() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open("rhtool", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("kv");
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function idbSet(k, v) {
+  const db = await idb();
+  return new Promise((res, rej) => {
+    const tx = db.transaction("kv", "readwrite");
+    tx.objectStore("kv").put(v, k);
+    tx.oncomplete = res; tx.onerror = rej;
+  });
+}
+async function idbGet(k) {
+  const db = await idb();
+  return new Promise((res, rej) => {
+    const q = db.transaction("kv").objectStore("kv").get(k);
+    q.onsuccess = () => res(q.result); q.onerror = rej;
+  });
+}
+
+function updateDirBtn(extra) {
+  document.getElementById("dirBtnText").textContent =
+    "下载目录：" + (dirHandle ? dirHandle.name : "默认") + (extra || "");
+}
+
+document.getElementById("dirBtn").onclick = async () => {
+  if (!window.showDirectoryPicker) {
+    alert("当前浏览器不支持自定义下载目录，请使用 Edge 或 Chrome");
+    return;
+  }
+  try {
+    // 已有记住的目录但权限失效时，先补授权
+    if (dirHandle && (await dirHandle.queryPermission({ mode: "readwrite" })) !== "granted") {
+      if ((await dirHandle.requestPermission({ mode: "readwrite" })) === "granted") {
+        updateDirBtn();
+        return;
+      }
+    }
+    dirHandle = await showDirectoryPicker({ mode: "readwrite" });
+    await idbSet("dir", dirHandle);
+    updateDirBtn();
+  } catch (e) { /* 用户取消选择 */ }
+};
+
+// 页面打开时尝试恢复上次选择的目录
+(async () => {
+  try { lastImgHandle = (await idbGet("lastImg")) || null; } catch (e) {}  // 恢复上次选图目录
+  if (!window.showDirectoryPicker) return;
+  try {
+    const h = await idbGet("dir");
+    if (!h) return;
+    dirHandle = h;
+    const perm = await h.queryPermission({ mode: "readwrite" });
+    updateDirBtn(perm === "granted" ? "" : "（点我授权）");
+  } catch (e) {}
+})();
+
+// 直接写入所选目录（不弹保存框）
+async function saveToDir(name, blob) {
+  const fh = await dirHandle.getFileHandle(name, { create: true });
+  const w = await fh.createWritable();
+  await w.write(blob);
+  await w.close();
+}
+
+// ================= 初始化 =================
+// 结果图点击预览（事件委托，兼容动态渲染的结果）
+const lightbox = document.getElementById("lightbox");
+document.getElementById("resultArea").addEventListener("click", e => {
+  if (e.target.matches(".result-item img")) {
+    document.getElementById("lbImg").src = e.target.src;
+    document.getElementById("lbDownload").href = e.target.src;
+    lightbox.classList.add("show");
+  }
+});
+lightbox.addEventListener("click", e => {
+  if (e.target.id !== "lbDownload") lightbox.classList.remove("show");
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") lightbox.classList.remove("show");
+});
+
+refreshKeyBtn();
+renderAll();
+</script>
+</body>
+</html>
