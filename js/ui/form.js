@@ -102,7 +102,7 @@ async function pickImageField(i, fi) {
 function renderImgPreview(ua, dataUrl) {
   const img = new Image();
   img.onload = () => {
-    ua.innerHTML = `<img src="${dataUrl}"><div class="img-dim">📐 ${img.naturalWidth} × ${img.naturalHeight} px</div>`;
+    ua.innerHTML = `<img src="${dataUrl}"><div class="img-dim">📐 ${img.naturalWidth} × ${img.naturalHeight} px<br><small style="color:#8a93a8;font-size:11px">单击预览，双击更改图片</small></div>`;
   };
   img.src = dataUrl;
 }
