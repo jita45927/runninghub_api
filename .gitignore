@@ -3,3 +3,5 @@ download/
 
 # 测试截图缓存
 .screenshots/
+
+appinfo.txt
