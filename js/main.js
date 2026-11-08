@@ -30,7 +30,7 @@ async function grantDownloadDir() {
         return true;
       }
     }
-    state.dirHandle = await showDirectoryPicker({ mode: "readwrite" });
+    state.dirHandle = await showDirectoryPicker({ mode: "readwrite", ...(state.toolsDirHandle ? { startIn: state.toolsDirHandle } : {}) });
     await idbSet("dir", state.dirHandle);
     updateDirBtn();
     return true;
@@ -65,7 +65,7 @@ async function grantToolsDir() {
   try {
     if (!state.toolsDirHandle) {
       // 首次授权：选择 tools 目录
-      state.toolsDirHandle = await showDirectoryPicker({ mode: "readwrite" });
+      state.toolsDirHandle = await showDirectoryPicker({ mode: "readwrite", ...(state.dirHandle ? { startIn: state.dirHandle } : {}) });
       await idbSet("toolsDir", state.toolsDirHandle);
     } else if (!(await toolsDirGranted())) {
       // 已记住目录但权限为 prompt：借点击手势补授权

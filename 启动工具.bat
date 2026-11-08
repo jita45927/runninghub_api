@@ -1,6 +1,10 @@
 @echo off
+chcp 65001 >nul
 cd /d %~dp0
 set PORT=8899
+
+rem Write app info for the page (tools dir absolute path, shown in setup wizard)
+echo %CD%\tools> appinfo.txt
 
 where python >nul 2>nul
 if errorlevel 1 (

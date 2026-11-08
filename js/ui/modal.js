@@ -92,9 +92,21 @@ function setStepState(stepEl, statusEl, ok, dirName, isNext) {
 }
 
 // 刷新向导中两项授权状态，并高亮引导到下一个待授权项
+let toolsPathHintCache = null;  // bat 启动时写入的 tools 目录绝对路径（appinfo.txt）
 async function refreshSetupWizard() {
   const supported = !!window.showDirectoryPicker;
   const toolsOk = await toolsDirGranted();
+  // 未授权时显示目标路径指引（由启动 bat 写入 appinfo.txt，仅在服务器模式下可用）
+  const hint = document.getElementById("toolsDirPathHint");
+  if (hint && !toolsOk) {
+    if (toolsPathHintCache === null) {
+      try {
+        const r = await fetch("appinfo.txt");
+        toolsPathHintCache = r.ok ? (await r.text()).trim() : "";
+      } catch (e) { toolsPathHintCache = ""; }
+    }
+    hint.textContent = toolsPathHintCache ? "📂 " + toolsPathHintCache : "";
+  } else if (hint) hint.textContent = "";
   const dlOk = await dirGranted(state.dirHandle);
   const toolsBtn = document.getElementById("grantToolsDirBtn");
   const dlBtn = document.getElementById("grantDownloadDirBtn");
