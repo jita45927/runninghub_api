@@ -2,15 +2,19 @@
 import { state, saveTools, saveActiveId } from "./store.js";
 import { showStatus } from "./ui/form.js";
 
-// 导出工具为一个 .json 配置文件（不含 API Key）
-export function exportToolConfig(t) {
-  const data = {
+// 工具对象 → 配置文件 JSON（与导出/目录文件格式一致）
+function toolToConfigJSON(t) {
+  return JSON.stringify({
     type: "runninghub-tool-config",
     version: 1,
     name: t.name, icon: t.icon, desc: t.desc, toolType: t.toolType || "app",
     webappId: t.webappId, instanceType: t.instanceType, fields: t.fields
-  };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  }, null, 2);
+}
+
+// 导出工具为一个 .json 配置文件（不含 API Key）
+export function exportToolConfig(t) {
+  const blob = new Blob([toolToConfigJSON(t)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = (t.name || "tool") + ".rhtool.json";
@@ -47,6 +51,15 @@ export function importToolFile(file, renderAll) {
       saveTools();
       saveActiveId();
       renderAll();
+      // 已授权配置目录时，导入的配置同时写入目录文件
+      const tool = idx >= 0 ? state.tools[idx] : merged;
+      (async () => {
+        if (!(await toolsDirGranted())) return;
+        try {
+          const fn = await writeToolToDir(tool);
+          showStatus("已导入并保存到 tools/" + fn, "ok");
+        } catch (err) { showStatus("写入配置目录失败：" + err.message, "error"); }
+      })();
     } catch (err) {
       alert("导入失败：" + err.message);
     }
@@ -82,4 +95,75 @@ export async function scanToolsDir(renderAll) {
     }
     if (changed) { saveTools(); renderAll(); }
   } catch (e) { /* tools 目录不存在或为空时忽略 */ }
+}
+
+// ============ 配置目录授权模式：File System Access API 直接读写 tools 目录 ============
+// 授权后 tools 目录是工具配置的唯一数据源，localStorage 仅作缓存
+
+// 配置目录句柄当前是否已有 readwrite 权限（不触发授权弹窗）
+export async function toolsDirGranted() {
+  const h = state.toolsDirHandle;
+  if (!h || !window.showDirectoryPicker) return false;
+  try { return (await h.queryPermission({ mode: "readwrite" })) === "granted"; }
+  catch (e) { return false; }
+}
+
+// 工具对应的配置文件名（替换文件系统不允许的字符，中文等 Unicode 字符直接保留）
+export function toolFileName(t) {
+  return String(t.name || "未命名工具").replace(/[\\/:*?"<>|]/g, "_") + ".rhtool.json";
+}
+
+// 遍历配置目录句柄读取全部 *.rhtool.json（文件内容为准，替代 HTTP 目录扫描）
+export async function loadToolsFromDir(renderAll) {
+  const dh = state.toolsDirHandle;
+  if (!dh) return false;
+  let changed = false;
+  let n = 0;
+  try {
+    for await (const [name, handle] of dh.entries()) {
+      if (handle.kind !== "file" || !/\.rhtool\.json$/i.test(name)) continue;
+      let t;
+      try {
+        t = JSON.parse(await (await handle.getFile()).text());
+        if (!t || typeof t !== "object" || !Array.isArray(t.fields)) throw new Error("配置格式不对");
+      } catch (e) {
+        showStatus("⚠️ 配置文件「" + name + "」损坏，已跳过加载", "error");  // 单个文件损坏不影响其余加载
+        continue;
+      }
+      // 同应用ID或同名视为同一工具：以文件内容为准更新，并记住 id → 文件名映射
+      const idx = state.tools.findIndex(x => (t.webappId && x.webappId === t.webappId) || (t.name && x.name === t.name));
+      if (idx >= 0) { t.id = state.tools[idx].id; state.tools[idx] = t; }
+      else { t.id = "t" + Date.now() + "_" + n++; state.tools.push(t); }
+      state.toolFileNames[t.id] = name;
+      changed = true;
+    }
+  } catch (e) { return false; }  // 句柄失效等情况，调用方回退 HTTP 扫描
+  if (changed) { saveTools(); renderAll(); }
+  return true;
+}
+
+// 把工具配置写回目录文件；改名导致文件名变化时删除旧文件，返回写入的文件名
+export async function writeToolToDir(t) {
+  const dh = state.toolsDirHandle;
+  if (!dh) return null;
+  const fileName = toolFileName(t);
+  const oldName = state.toolFileNames[t.id];
+  const fh = await dh.getFileHandle(fileName, { create: true });
+  const w = await fh.createWritable();
+  await w.write(toolToConfigJSON(t));
+  await w.close();
+  if (oldName && oldName !== fileName) {
+    try { await dh.removeEntry(oldName); } catch (e) { /* 旧文件已不存在 */ }
+  }
+  state.toolFileNames[t.id] = fileName;
+  return fileName;
+}
+
+// 删除工具对应的目录文件
+export async function deleteToolFromDir(toolId) {
+  const dh = state.toolsDirHandle;
+  const name = state.toolFileNames[toolId];
+  if (!dh || !name) return;
+  try { await dh.removeEntry(name); } catch (e) { /* 文件已不存在 */ }
+  delete state.toolFileNames[toolId];
 }

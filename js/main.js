@@ -4,8 +4,9 @@ import { renderToolList } from "./ui/toollist.js";
 import { renderWorkspace } from "./ui/form.js";
 import { initLightbox } from "./ui/lightbox.js";
 import { initModals, refreshKeyBtn } from "./ui/modal.js";
-import { scanToolsDir } from "./tools.js";
+import { scanToolsDir, loadToolsFromDir, toolsDirGranted } from "./tools.js";
 import { runActiveTool, cancelCurrentRun } from "./runner.js";
+import { showStatus } from "./ui/form.js";
 
 function renderAll() { renderToolList(renderAll); renderWorkspace(); }
 
@@ -49,6 +50,49 @@ function initDirButton() {
   })();
 }
 
+// ================= 配置目录授权（tools/ 作为工具配置唯一数据源） =================
+function updateToolsDirBtn(text) {
+  document.getElementById("toolsDirBtn").textContent = "🗂 配置目录：" +
+    (text || (state.toolsDirHandle ? "已授权（" + state.toolsDirHandle.name + "）" : "未授权"));
+}
+
+function initToolsDirButton() {
+  const btn = document.getElementById("toolsDirBtn");
+  // 浏览器不支持 File System Access 时隐藏按钮，整体回退为 HTTP 扫描 + localStorage
+  if (!window.showDirectoryPicker) { btn.style.display = "none"; scanToolsDir(renderAll); return; }
+
+  btn.onclick = async () => {
+    try {
+      if (!state.toolsDirHandle) {
+        // 首次授权：选择 tools 目录
+        state.toolsDirHandle = await showDirectoryPicker({ mode: "readwrite" });
+        await idbSet("toolsDir", state.toolsDirHandle);
+      } else if (!(await toolsDirGranted())) {
+        // 已记住目录但权限为 prompt：借点击手势补授权
+        if ((await state.toolsDirHandle.requestPermission({ mode: "readwrite" })) !== "granted") return;
+      }
+      updateToolsDirBtn();
+      if (await loadToolsFromDir(renderAll)) showStatus("已从配置目录读取工具列表", "ok");
+    } catch (e) { /* 用户取消选择 */ }
+  };
+
+  // 页面打开时尝试恢复上次授权的目录
+  (async () => {
+    try {
+      const h = await idbGet("toolsDir");
+      if (!h) { updateToolsDirBtn(); scanToolsDir(renderAll); return; }  // 从未授权：保持原有 HTTP 扫描
+      state.toolsDirHandle = h;
+      if (await toolsDirGranted()) {
+        updateToolsDirBtn();
+        if (!(await loadToolsFromDir(renderAll))) scanToolsDir(renderAll);  // 句柄失效时回退
+      } else {
+        updateToolsDirBtn("点我授权（" + h.name + "）");  // 权限为 prompt，需用户手势补授权
+        scanToolsDir(renderAll);
+      }
+    } catch (e) { scanToolsDir(renderAll); }
+  })();
+}
+
 // ================= 初始化 =================
 document.getElementById("runBtn").onclick = runActiveTool;
 document.getElementById("cancelBtn").onclick = cancelCurrentRun;
@@ -56,6 +100,6 @@ document.getElementById("cancelBtn").onclick = cancelCurrentRun;
 initLightbox();
 initModals(renderAll);
 initDirButton();
+initToolsDirButton();
 refreshKeyBtn();
 renderAll();
-scanToolsDir(renderAll);

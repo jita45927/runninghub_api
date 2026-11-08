@@ -2,7 +2,8 @@
 import { LS, FIELD_TYPES, esc } from "../config.js";
 import { state, saveTools, saveActiveId } from "../store.js";
 import { getAccountStatus } from "../api.js";
-import { importToolFile, exportToolConfig } from "../tools.js";
+import { importToolFile, exportToolConfig, toolsDirGranted, writeToolToDir, deleteToolFromDir } from "../tools.js";
+import { showStatus } from "./form.js";
 
 let editingToolId = null;
 let editingFields = [];  // 配置弹窗中正在编辑的字段数组
@@ -128,7 +129,7 @@ export function initModals(renderAll) {
     if (file) importToolFile(file, renderAll);
   };
 
-  document.getElementById("saveToolBtn").onclick = () => {
+  document.getElementById("saveToolBtn").onclick = async () => {
     // 触发未失焦输入框的 onchange，确保数据已收集
     document.querySelectorAll("#fieldsEditor [data-k]").forEach(inp => inp.dispatchEvent(new Event("change")));
     const bad = editingFields.find(f => !f.label || !f.nodeId || !f.fieldName);
@@ -153,16 +154,29 @@ export function initModals(renderAll) {
     saveActiveId();
     toolModal.classList.remove("show");
     renderAll();
+    // 已授权配置目录时，把工具 JSON 写回目录文件（改名时删除旧文件）
+    if (await toolsDirGranted()) {
+      try {
+        const fn = await writeToolToDir(state.tools.find(x => x.id === (editingToolId || data.id)));
+        showStatus("已保存到 tools/" + fn, "ok");
+      } catch (err) { showStatus("写入配置目录失败：" + err.message, "error"); }
+    }
   };
-  document.getElementById("deleteToolBtn").onclick = () => {
+  document.getElementById("deleteToolBtn").onclick = async () => {
     if (!editingToolId) return;
-    if (!confirm("确定删除这个工具吗？")) return;
-    state.tools = state.tools.filter(x => x.id !== editingToolId);
-    if (state.activeId === editingToolId) state.activeId = state.tools[0] && state.tools[0].id;
+    const inDir = await toolsDirGranted();
+    if (!confirm("确定删除这个工具吗？" + (inDir ? "\n将同时删除 tools 目录中的配置文件。" : ""))) return;
+    const delId = editingToolId;
+    state.tools = state.tools.filter(x => x.id !== delId);
+    if (state.activeId === delId) state.activeId = state.tools[0] && state.tools[0].id;
     saveTools();
     saveActiveId();
     toolModal.classList.remove("show");
     renderAll();
+    if (inDir) {
+      try { await deleteToolFromDir(delId); showStatus("已删除 tools 目录中的配置文件", "ok"); }
+      catch (err) { showStatus("删除配置文件失败：" + err.message, "error"); }
+    }
   };
 
   // 弹窗通用关闭

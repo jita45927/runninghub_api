@@ -13,6 +13,8 @@ export const state = {
   runningToolId: null,   // 当前运行中任务所属的工具 id（用于阻止删除运行中的工具）
   dirHandle: null,       // 自定义下载目录句柄
   lastImgHandle: null,   // 上次选图所在位置（用于 showOpenFilePicker 的 startIn）
+  toolsDirHandle: null,  // 配置目录（tools/）句柄，授权后 tools 目录成为工具配置唯一数据源
+  toolFileNames: {},     // 工具 id → 配置目录中的文件名（用于改名时删除旧文件）
 };
 
 // localStorage 数据损坏时回退到默认示例工具，避免页面白屏
