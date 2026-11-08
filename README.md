@@ -39,7 +39,7 @@ runninghub_api/
 | `fields[].fieldName` | 字段名（照抄 fieldName，如 `image` / `text` / `value`） |
 | `fields[].def` | 默认值；select 类型填逗号分隔的选项 |
 
-新增工具：在页面里「＋ 添加工具」配置后「📤 导出配置」，把 json 放进 `tools/` 即可。
+新增工具：在页面里「＋ 添加工具」配置并保存（授权配置目录后自动写入 `tools/`），或直接把 json 放进 `tools/` 文件夹。
 
 ## API Key 安全机制
 
