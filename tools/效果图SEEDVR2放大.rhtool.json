@@ -1,15 +1,33 @@
 {
   "type": "runninghub-tool-config",
   "version": 1,
-  "toolType": "workflow",
   "name": "效果图SEEDVR2放大",
   "icon": "🔍",
   "desc": "上传效果图，SeedVR2 放大到目标分辨率",
+  "toolType": "workflow",
   "webappId": "2035302221096689666",
   "instanceType": "default",
   "fields": [
-    { "label": "上传图片", "type": "image", "nodeId": "86", "fieldName": "image", "def": "" },
-    { "label": "目标分辨率", "type": "number", "nodeId": "102", "fieldName": "value", "def": "2160" },
-    { "label": "种子（留空则用工流默认值）", "type": "number", "nodeId": "1", "fieldName": "seed", "def": "" }
+    {
+      "label": "上传图片",
+      "type": "image",
+      "nodeId": "86",
+      "fieldName": "image",
+      "def": ""
+    },
+    {
+      "label": "目标图短边分辨率",
+      "type": "number",
+      "nodeId": "102",
+      "fieldName": "value",
+      "def": "1536"
+    },
+    {
+      "label": "种子（留空则用工流默认值）",
+      "type": "number",
+      "nodeId": "1",
+      "fieldName": "seed",
+      "def": ""
+    }
   ]
 }
