@@ -149,7 +149,7 @@
     display: none; align-items: center; justify-content: center; cursor: zoom-out;
   }
   .lightbox.show { display: flex; }
-  .lightbox img { max-width: 92vw; max-height: 86vh; border-radius: 10px; box-shadow: 0 8px 60px rgba(0,0,0,.6); }
+  .lightbox img { max-width: 92vw; max-height: 86vh; border-radius: 10px; box-shadow: 0 8px 60px rgba(0,0,0,.6); transition: transform .06s; }
   .lightbox .lb-bar {
     position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%);
     display: flex; gap: 12px; align-items: center;
@@ -412,7 +412,7 @@ function renderWorkspace() {
     if (f.type === "image") {
       return `<div class="field${span}">
         <label>${f.label}</label>
-        <div class="upload-area" id="ua_${i}"><span>点击选择或拖拽图片到这里<br><small style="color:#4a5470">JPG / PNG / WEBP，≤30MB</small></span></div>
+        <div class="upload-area" id="ua_${i}"><span>双击选择图片，或拖拽到这里<br><small style="color:#4a5470">JPG / PNG / WEBP，≤30MB；上传后单击可预览缩放</small></span></div>
         <input type="file" id="fi_${i}" accept="image/*" style="display:none">
       </div>`;
     }
@@ -433,7 +433,13 @@ function renderWorkspace() {
     if (f.type !== "image") return;
     const ua = document.getElementById("ua_" + i);
     const fi = document.getElementById("fi_" + i);
-    ua.onclick = () => pickImageField(i, fi);
+    // 单击=预览已上传图片（可滚轮缩放），双击=重新选择图片
+    ua.onclick = () => {
+      if (!fieldFiles[i]) { pickImageField(i, fi); return; }
+      clearTimeout(ua._clickTimer);
+      ua._clickTimer = setTimeout(() => openLightbox(URL.createObjectURL(fieldFiles[i])), 260);
+    };
+    ua.ondblclick = () => { clearTimeout(ua._clickTimer); pickImageField(i, fi); };
     fi.onchange = e => { if (e.target.files[0]) pickFile(i, e.target.files[0]); };
     ua.ondragover = e => { e.preventDefault(); ua.classList.add("dragover"); };
     ua.ondragleave = () => ua.classList.remove("dragover");
@@ -983,13 +989,25 @@ async function saveToDir(name, blob) {
 // ================= 初始化 =================
 // 结果图点击预览（事件委托，兼容动态渲染的结果）
 const lightbox = document.getElementById("lightbox");
+let lbScale = 1;
+function openLightbox(url) {
+  lbScale = 1;
+  const img = document.getElementById("lbImg");
+  img.src = url;
+  img.style.transform = "scale(1)";
+  document.getElementById("lbDownload").href = url;
+  lightbox.classList.add("show");
+}
 document.getElementById("resultArea").addEventListener("click", e => {
-  if (e.target.matches(".result-item img")) {
-    document.getElementById("lbImg").src = e.target.src;
-    document.getElementById("lbDownload").href = e.target.src;
-    lightbox.classList.add("show");
-  }
+  if (e.target.matches(".result-item img")) openLightbox(e.target.src);
 });
+// 滚轮缩放预览图
+lightbox.addEventListener("wheel", e => {
+  e.preventDefault();
+  lbScale *= e.deltaY < 0 ? 1.15 : 1 / 1.15;
+  lbScale = Math.min(10, Math.max(0.1, lbScale));
+  document.getElementById("lbImg").style.transform = "scale(" + lbScale + ")";
+}, { passive: false });
 lightbox.addEventListener("click", e => {
   if (e.target.id !== "lbDownload") lightbox.classList.remove("show");
 });
