@@ -350,7 +350,8 @@ let activeId = localStorage.getItem(LS.active) || (tools[0] && tools[0].id);
 if (!tools.some(t => t.id === activeId)) activeId = tools[0] && tools[0].id;  // 修正失效的选中状态
 let editingToolId = null;
 let editingFields = [];      // 配置弹窗中正在编辑的字段数组
-let fieldFiles = {};         // 工作区各图片字段已选的 File 对象
+let fieldFiles = {};         // 当前工具各图片字段已选的 File 对象（指向 fieldFilesByTool[当前工具id]）
+let fieldFilesByTool = {};   // 每个工具各自的已选图片，切换工具后保留
 let toolResults = {};        // 每个工具各自的生成结果（按工具 id 隔离）
 
 function saveTools() { localStorage.setItem(LS.tools, JSON.stringify(tools)); }
@@ -397,7 +398,7 @@ function renderWorkspace() {
   document.getElementById("wsName").textContent = t ? t.name : "请选择工具";
   document.getElementById("wsDesc").textContent = t ? (t.desc || "点击右上角「配置此工具」完善参数") : "从左侧选择一个工具开始使用";
 
-  fieldFiles = {};
+  fieldFiles = t ? (fieldFilesByTool[t.id] || (fieldFilesByTool[t.id] = {})) : {};  // 恢复当前工具已选的图片
   const form = document.getElementById("formArea");
   if (!t || !t.fields || !t.fields.length) {
     form.innerHTML = '<div style="color:#4a5470;font-size:13px;padding:8px 0">此工具还没有输入项，点右上角「配置此工具」添加。</div>';
@@ -443,6 +444,17 @@ function renderWorkspace() {
   // 恢复当前工具自己的生成结果（各工具结果互相隔离）
   document.getElementById("resultArea").innerHTML =
     toolResults[t.id] || '<div class="result-placeholder">生成的内容会显示在这里</div>';
+
+  // 恢复已选图片的预览
+  t.fields.forEach((f, i) => {
+    if (f.type !== "image" || !fieldFiles[i]) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const ua = document.getElementById("ua_" + i);
+      if (ua) ua.innerHTML = `<img src="${ev.target.result}">`;
+    };
+    reader.readAsDataURL(fieldFiles[i]);
+  });
 }
 
 // 用文件系统API选择图片：通过 startIn 记住并打开上次选择的目录
