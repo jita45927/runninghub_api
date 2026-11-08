@@ -40,6 +40,13 @@
   }
   .tool-item:hover { background: var(--panel2); }
   .tool-item.active { background: var(--panel2); border-color: var(--accent); }
+  .tool-item { position: relative; }
+  .tool-del {
+    position: absolute; right: 8px; top: 8px; width: 20px; height: 20px; border-radius: 6px;
+    color: #6a7694; display: none; align-items: center; justify-content: center; font-size: 12px;
+  }
+  .tool-item:hover .tool-del { display: flex; }
+  .tool-del:hover { background: var(--danger); color: #fff; }
   .tool-icon { width: 38px; height: 38px; border-radius: 9px; background: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 19px; flex-shrink: 0; }
   .tool-item.active .tool-icon { background: linear-gradient(135deg, #5b8cff33, #9b5bff33); }
   .tool-meta { min-width: 0; }
@@ -357,7 +364,17 @@ function renderToolList() {
         <div class="tool-name">${t.name || "未命名"}</div>
         <div class="tool-desc">${t.desc || ""}</div>
         <div class="tool-status ${configured ? "ok" : ""}">${configured ? "● 已配置" : "○ 待配置"}</div>
-      </div>`;
+      </div>
+      <div class="tool-del" title="删除此工具">✕</div>`;
+    el.querySelector(".tool-del").onclick = e => {
+      e.stopPropagation();
+      if (!confirm("确定删除「" + (t.name || "未命名") + "」吗？")) return;
+      tools = tools.filter(x => x.id !== t.id);
+      if (activeId === t.id) activeId = tools[0] && tools[0].id;
+      saveTools();
+      localStorage.setItem(LS.active, activeId || "");
+      renderAll();
+    };
     el.onclick = () => { activeId = t.id; localStorage.setItem(LS.active, activeId); renderAll(); };
     list.appendChild(el);
   });
@@ -584,8 +601,9 @@ document.getElementById("importFileInput").onchange = e => {
     try {
       const data = JSON.parse(ev.target.result);
       if (!data || !Array.isArray(data.fields)) throw new Error("文件格式不对");
-      tools.push({
-        id: "t" + Date.now(),
+      // 去重：同应用ID或同名工具 → 更新而不是新增
+      const idx = tools.findIndex(x => (data.webappId && x.webappId === data.webappId) || (data.name && x.name === data.name));
+      const merged = {
         icon: data.icon || "🧩",
         name: data.name || file.name.replace(/\.rhtool\.json$/i, "").replace(/\.json$/i, ""),
         desc: data.desc || "",
@@ -593,8 +611,18 @@ document.getElementById("importFileInput").onchange = e => {
         toolType: data.toolType || "app",
         instanceType: data.instanceType || "default",
         fields: data.fields
-      });
+      };
+      if (idx >= 0) {
+        tools[idx] = { ...merged, id: tools[idx].id };
+        activeId = tools[idx].id;
+        showStatus("已更新现有工具「" + merged.name + "」", "ok");
+      } else {
+        merged.id = "t" + Date.now();
+        tools.push(merged);
+        activeId = merged.id;
+      }
       saveTools();
+      localStorage.setItem(LS.active, activeId);
       renderAll();
     } catch (err) {
       alert("导入失败：" + err.message);
