@@ -351,6 +351,7 @@ if (!tools.some(t => t.id === activeId)) activeId = tools[0] && tools[0].id;  //
 let editingToolId = null;
 let editingFields = [];      // 配置弹窗中正在编辑的字段数组
 let fieldFiles = {};         // 工作区各图片字段已选的 File 对象
+let toolResults = {};        // 每个工具各自的生成结果（按工具 id 隔离）
 
 function saveTools() { localStorage.setItem(LS.tools, JSON.stringify(tools)); }
 function activeTool() { return tools.find(t => t.id === activeId); }
@@ -380,7 +381,11 @@ function renderToolList() {
       localStorage.setItem(LS.active, activeId || "");
       renderAll();
     };
-    el.onclick = () => { activeId = t.id; localStorage.setItem(LS.active, activeId); renderAll(); };
+    el.onclick = () => {
+      // 切换前保存当前工具的结果，切换后恢复目标工具的结果
+      if (activeId) toolResults[activeId] = document.getElementById("resultArea").innerHTML;
+      activeId = t.id; localStorage.setItem(LS.active, activeId); renderAll();
+    };
     list.appendChild(el);
   });
 }
@@ -434,6 +439,10 @@ function renderWorkspace() {
       if (e.dataTransfer.files[0]) pickFile(i, e.dataTransfer.files[0]);
     };
   });
+
+  // 恢复当前工具自己的生成结果（各工具结果互相隔离）
+  document.getElementById("resultArea").innerHTML =
+    toolResults[t.id] || '<div class="result-placeholder">生成的内容会显示在这里</div>';
 }
 
 // 用文件系统API选择图片：通过 startIn 记住并打开上次选择的目录
@@ -750,6 +759,7 @@ runBtn.onclick = async () => {
   if (!tool.webappId) { showStatus("当前工具未填写应用 ID，请点击右上角「配置此工具」", "error"); return; }
 
   runBtn.disabled = true;
+  const runToolId = tool.id;  // 记录本次运行属于哪个工具，防止运行中切换工具后结果串位
   document.getElementById("resultArea").innerHTML = '<div class="result-placeholder">生成中…</div>';
   try {
     // 逐字段组装 nodeInfoList
@@ -787,9 +797,12 @@ runBtn.onclick = async () => {
       if (url) return `<div class="result-text">📎 <a href="${url}" target="_blank" style="color:#5b8cff">${url}</a></div>`;
       return "";
     }).join("");
-    document.getElementById("resultArea").innerHTML = html
+    // 结果写入所属工具的存储；若用户还停留在该工具界面则直接更新显示
+    const resultHtml = html
       ? '<div class="result-grid">' + html + "</div>"
       : '<div class="result-placeholder">任务成功但没有输出内容</div>';
+    toolResults[runToolId] = resultHtml;
+    if (activeId === runToolId) document.getElementById("resultArea").innerHTML = resultHtml;
     // 自动下载结果原图到本地（避免24小时后链接过期丢失）
     let downloaded = 0;
     for (let idx = 0; idx < results.length; idx++) {
@@ -826,7 +839,8 @@ runBtn.onclick = async () => {
     showStatus(costText + "。链接24小时内有效，请及时下载", "success");
   } catch (err) {
     showStatus("❌ " + err.message, "error");
-    document.getElementById("resultArea").innerHTML = '<div class="result-placeholder">生成失败</div>';
+    toolResults[runToolId] = '<div class="result-placeholder">生成失败</div>';
+    if (activeId === runToolId) document.getElementById("resultArea").innerHTML = toolResults[runToolId];
   } finally {
     runBtn.disabled = false;
   }
