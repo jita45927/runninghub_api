@@ -15,6 +15,7 @@ export const state = {
   lastImgHandle: null,   // 上次选图所在位置（用于 showOpenFilePicker 的 startIn）
   toolsDirHandle: null,  // 配置目录（tools/）句柄，授权后 tools 目录成为工具配置唯一数据源
   toolFileNames: {},     // 工具 id → 配置目录中的文件名（用于改名时删除旧文件）
+  collapsedCats: [],     // 左侧栏中被收起的分类名
 };
 
 // localStorage 数据损坏时回退到默认示例工具，避免页面白屏
@@ -36,6 +37,11 @@ if (!state.tools.some(t => t.id === state.activeId)) state.activeId = state.tool
 export function saveTools() { localStorage.setItem(LS.tools, JSON.stringify(state.tools)); }
 export function saveActiveId() { localStorage.setItem(LS.active, state.activeId || ""); }
 export function activeTool() { return state.tools.find(t => t.id === state.activeId); }
+
+// 分类收起状态持久化
+try { state.collapsedCats = JSON.parse(localStorage.getItem("rhtool_cats_v1") || "[]"); }
+catch (e) { state.collapsedCats = []; }
+export function saveCats() { localStorage.setItem("rhtool_cats_v1", JSON.stringify(state.collapsedCats)); }
 
 // ================= 极简 IndexedDB 封装，用于记住用户选择的目录/文件位置 =================
 function idb() {

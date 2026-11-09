@@ -67,6 +67,7 @@ export function openToolModal(toolId) {
   document.getElementById("tIcon").value = t ? t.icon : "";
   document.getElementById("tName").value = t ? t.name : "";
   document.getElementById("tDesc").value = t ? t.desc : "";
+  document.getElementById("tCategory").value = t ? (t.category || "") : "";
   document.getElementById("tWebappId").value = t ? t.webappId : "";
   document.getElementById("tToolType").value = t ? (t.toolType || "app") : "app";
   document.getElementById("tToolType").dispatchEvent(new Event("change"));
@@ -197,6 +198,7 @@ export function initModals(renderAll) {
       icon: document.getElementById("tIcon").value.trim() || "🧩",
       name: document.getElementById("tName").value.trim() || "未命名工具",
       desc: document.getElementById("tDesc").value.trim(),
+      category: document.getElementById("tCategory").value.trim(),
       webappId: document.getElementById("tWebappId").value.trim(),
       toolType: document.getElementById("tToolType").value,
       instanceType: document.getElementById("tInstanceType").value,
