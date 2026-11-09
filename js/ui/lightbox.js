@@ -1,5 +1,5 @@
 // ================= 图片预览灯箱（滚轮缩放 / 中键拖动 / objectURL 回收） =================
-import { state } from "../store.js";
+import { state } from "../store.js?v=20261109a";
 
 // 图片预览 objectURL 缓存：同一 File 复用不重复创建，灯箱关闭时回收不再使用的
 const previewUrls = new Map();  // File -> objectURL

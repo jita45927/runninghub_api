@@ -1,12 +1,12 @@
 // ================= 入口：初始化、事件绑定、模块装配 =================
-import { state, idbGet, idbSet } from "./store.js";
-import { renderToolList } from "./ui/toollist.js";
-import { renderWorkspace } from "./ui/form.js";
-import { initLightbox } from "./ui/lightbox.js";
-import { initModals, initSetupWizard, refreshKeyBtn } from "./ui/modal.js";
-import { scanToolsDir, loadToolsFromDir, toolsDirGranted } from "./tools.js";
-import { runActiveTool, cancelCurrentRun } from "./runner.js";
-import { showStatus } from "./ui/form.js";
+import { state, idbGet, idbSet } from "./store.js?v=20261109a";
+import { renderToolList } from "./ui/toollist.js?v=20261109a";
+import { renderWorkspace } from "./ui/form.js?v=20261109a";
+import { initLightbox } from "./ui/lightbox.js?v=20261109a";
+import { initModals, initSetupWizard, refreshKeyBtn } from "./ui/modal.js?v=20261109a";
+import { scanToolsDir, loadToolsFromDir, toolsDirGranted } from "./tools.js?v=20261109a";
+import { runActiveTool, cancelCurrentRun } from "./runner.js?v=20261109a";
+import { showStatus } from "./ui/form.js?v=20261109a";
 
 function renderAll() { renderToolList(renderAll); renderWorkspace(); }
 

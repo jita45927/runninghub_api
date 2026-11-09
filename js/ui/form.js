@@ -1,7 +1,7 @@
 // ================= 工作区动态表单与图片上传交互 =================
-import { esc } from "../config.js";
-import { state, activeTool, idbSet } from "../store.js";
-import { openLightbox, previewUrlFor } from "./lightbox.js";
+import { esc } from "../config.js?v=20261109a";
+import { state, activeTool, idbSet } from "../store.js?v=20261109a";
+import { openLightbox, previewUrlFor } from "./lightbox.js?v=20261109a";
 
 // ================= 状态栏 =================
 export function showStatus(text, type) {

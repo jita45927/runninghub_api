@@ -1,5 +1,5 @@
 // ================= 生成结果渲染（DOM 构建防 XSS；url 仅接受 http/https） =================
-import { state } from "../store.js";
+import { state } from "../store.js?v=20261109a";
 
 // 把接口返回的 results 渲染为结果区 HTML：图片/视频显示缩略图，文本直接展示
 export function buildResultHtml(results) {

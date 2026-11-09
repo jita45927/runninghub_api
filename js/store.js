@@ -1,6 +1,6 @@
 // ================= 状态与存储层 =================
 // localStorage（带损坏兜底）+ IndexedDB（记住目录/文件句柄）+ 跨模块共享的可变状态
-import { LS, DEFAULT_TOOLS } from "./config.js";
+import { LS, DEFAULT_TOOLS } from "./config.js?v=20261109a";
 
 // 跨模块共享状态（简单可变对象，各模块直接读写）
 export const state = {

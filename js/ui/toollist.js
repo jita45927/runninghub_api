@@ -1,7 +1,7 @@
 // ================= 左侧工具列表（按分类分组，可展开/收起） =================
-import { state, saveTools, saveActiveId, saveCats } from "../store.js";
-import { toolsDirGranted, deleteToolFromDir } from "../tools.js";
-import { showStatus } from "./form.js";
+import { state, saveTools, saveActiveId, saveCats } from "../store.js?v=20261109a";
+import { toolsDirGranted, deleteToolFromDir } from "../tools.js?v=20261109a";
+import { showStatus } from "./form.js?v=20261109a";
 
 // 单个工具条目（DOM 构建，防注入）
 function buildToolItem(t, renderAll) {

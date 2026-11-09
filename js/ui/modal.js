@@ -1,9 +1,9 @@
 // ================= API Key 弹窗与工具配置弹窗（含输入项编辑器、导入导出入口） =================
-import { LS, FIELD_TYPES, esc } from "../config.js";
-import { state, saveTools, saveActiveId } from "../store.js";
-import { getAccountStatus } from "../api.js";
-import { importToolFile, toolsDirGranted, writeToolToDir, deleteToolFromDir } from "../tools.js";
-import { showStatus } from "./form.js";
+import { LS, FIELD_TYPES, esc } from "../config.js?v=20261109a";
+import { state, saveTools, saveActiveId } from "../store.js?v=20261109a";
+import { getAccountStatus } from "../api.js?v=20261109a";
+import { importToolFile, toolsDirGranted, writeToolToDir, deleteToolFromDir } from "../tools.js?v=20261109a";
+import { showStatus } from "./form.js?v=20261109a";
 
 let editingToolId = null;
 let editingFields = [];  // 配置弹窗中正在编辑的字段数组

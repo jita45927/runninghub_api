@@ -1,5 +1,5 @@
 // ================= RunningHub v2 API 层（纯接口请求，不含任何 DOM 操作） =================
-import { LS } from "./config.js";
+import { LS } from "./config.js?v=20261109a";
 
 export function base() { return localStorage.getItem(LS.site) || "https://www.runninghub.cn"; }
 export function apiKey() { return localStorage.getItem(LS.key) || ""; }
