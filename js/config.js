@@ -12,6 +12,9 @@ export const FIELD_TYPES = {
   select:   "下拉选择"
 };
 
+// 工具图标可选项（配置弹窗下拉）
+export const ICON_OPTIONS = ["🖼️","🎨","✨","🔍","⬆️","📐","🏞️","🌆","🏗️","🧱","🪄","✂️","🎞️","🖌️","📸","👤","💡","🌟","🎯","🧩"];
+
 // HTML 转义：配置/接口数据拼进 HTML 前必须转义，防 XSS
 export function esc(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, c =>

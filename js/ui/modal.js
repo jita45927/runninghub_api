@@ -1,5 +1,5 @@
 // ================= API Key 弹窗与工具配置弹窗（含输入项编辑器、导入导出入口） =================
-import { LS, FIELD_TYPES, esc } from "../config.js?v=20261109a";
+import { LS, FIELD_TYPES, ICON_OPTIONS, esc } from "../config.js?v=20261109a";
 import { state, saveTools, saveActiveId } from "../store.js?v=20261109a";
 import { getAccountStatus } from "../api.js?v=20261109a";
 import { importToolFile, toolsDirGranted, writeToolToDir, deleteToolFromDir } from "../tools.js?v=20261109a";
@@ -64,7 +64,10 @@ export function openToolModal(toolId) {
   editingToolId = toolId;
   const t = state.tools.find(x => x.id === toolId);
   document.getElementById("toolModalTitle").textContent = t ? "⚙️ 配置工具" : "＋ 添加工具";
-  document.getElementById("tIcon").value = t ? t.icon : "";
+  const iconSel = document.getElementById("tIcon");
+  const curIcon = t ? t.icon : "🖼️";
+  const opts = ICON_OPTIONS.includes(curIcon) ? ICON_OPTIONS : [curIcon, ...ICON_OPTIONS];
+  iconSel.innerHTML = opts.map(o => `<option value="${esc(o)}"${o === curIcon ? " selected" : ""}>${esc(o)}</option>`).join("");
   document.getElementById("tName").value = t ? t.name : "";
   document.getElementById("tDesc").value = t ? t.desc : "";
   document.getElementById("tCategory").value = t ? (t.category || "") : "";
