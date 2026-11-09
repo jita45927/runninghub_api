@@ -1,9 +1,9 @@
 {
   "type": "runninghub-tool-config",
   "version": 1,
-  "name": "效果图SEEDVR2放大",
+  "name": "效果图高清放大-SEEDVR2",
   "icon": "🔍",
-  "desc": "上传效果图，SeedVR2 放大到目标分辨率",
+  "desc": "上传效果图，SeedVR2 放大到目标分辨率，适用于AI生成的1K分辨率图放大，特别模糊的原始图放大效果一版。",
   "toolType": "workflow",
   "webappId": "2035302221096689666",
   "instanceType": "default",
