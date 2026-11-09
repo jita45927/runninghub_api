@@ -48,7 +48,11 @@ export async function runActiveTool() {
         if (val !== "") nodeInfoList.push({ nodeId: f.nodeId, fieldName: f.fieldName, fieldValue: val });
       }
     }
-    if (!nodeInfoList.length) throw new Error("没有可提交的参数，请检查工具配置");
+    // 仅当工具配置了输入项却全部为空时才视为配置错误；
+    // 无输入项的"零参数工作流"允许空 nodeInfoList 提交
+    if (!nodeInfoList.length && tool.fields && tool.fields.length) {
+      throw new Error("没有可提交的参数，请检查工具配置");
+    }
 
     showStatus("🚀 正在创建任务…");
     const taskId = await createTask(tool, nodeInfoList);
