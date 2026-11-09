@@ -1,0 +1,40 @@
+{
+  "type": "runninghub-tool-config",
+  "version": 1,
+  "name": "KLEIN-超分放大修复LORA版-适用于效果图",
+  "icon": "🧩",
+  "desc": "适合修复AI生成的1K图片，解决SEEDVR2修复不好的图，适合修复效果图，人像修复欠佳",
+  "toolType": "app",
+  "webappId": "2054488672979955714",
+  "instanceType": "default",
+  "fields": [
+    {
+      "label": "上传图片",
+      "type": "image",
+      "nodeId": "165",
+      "fieldName": "image",
+      "def": ""
+    },
+    {
+      "label": "提示词预设",
+      "type": "textarea",
+      "nodeId": "167",
+      "fieldName": "text",
+      "def": "提高分辨率，补充细节，修复画面。超高清，极致细节，高对比度，清晰的光影细节，保持画面色调不变，8K画质。"
+    },
+    {
+      "label": "放大图像短边尺寸",
+      "type": "number",
+      "nodeId": "168",
+      "fieldName": "value",
+      "def": "1536"
+    },
+    {
+      "label": "是否加入反推提示词",
+      "type": "select",
+      "nodeId": "166",
+      "fieldName": "value",
+      "def": "是,否"
+    }
+  ]
+}
