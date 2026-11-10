@@ -1,0 +1,55 @@
+{
+  "type": "runninghub-tool-config",
+  "version": 1,
+  "name": "FLUX-扩图",
+  "icon": "🧩",
+  "desc": "按照边长倍数扩展图片，自动补充空白",
+  "toolType": "app",
+  "webappId": "2034676742782197762",
+  "instanceType": "default",
+  "category": "效果图处理",
+  "fields": [
+    {
+      "label": "上传图片",
+      "type": "image",
+      "nodeId": "18",
+      "fieldName": "image",
+      "def": ""
+    },
+    {
+      "label": "宽度倍数",
+      "type": "number",
+      "nodeId": "180",
+      "fieldName": "value",
+      "def": "1.5"
+    },
+    {
+      "label": "左侧占比",
+      "type": "number",
+      "nodeId": "182",
+      "fieldName": "value",
+      "def": "0.5"
+    },
+    {
+      "label": "高度倍数",
+      "type": "number",
+      "nodeId": "181",
+      "fieldName": "value",
+      "def": "1.5"
+    },
+    {
+      "label": "顶部占比",
+      "type": "number",
+      "nodeId": "184",
+      "fieldName": "value",
+      "def": "0.5"
+    },
+    {
+      "label": "扩展后图像尺寸（场边）",
+      "type": "number",
+      "nodeId": "142",
+      "fieldName": "value",
+      "def": "1536"
+    }
+  ]
+}
