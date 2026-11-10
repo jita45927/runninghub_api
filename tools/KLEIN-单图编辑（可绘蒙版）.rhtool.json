@@ -1,0 +1,55 @@
+{
+  "type": "runninghub-tool-config",
+  "version": 1,
+  "name": "KLEIN-单图编辑（可绘蒙版）",
+  "icon": "🖌️",
+  "desc": "上传单张图片按提示词编辑（FLUX.2 Klein）；可手绘蒙版，并控制是否把蒙版涂成红色叠加进图片、是否缩放输出尺寸",
+  "toolType": "workflow",
+  "webappId": "2120165223045877761",
+  "instanceType": "default",
+  "category": "图片编辑",
+  "fields": [
+    {
+      "label": "上传图片",
+      "type": "image",
+      "nodeId": "165",
+      "fieldName": "image",
+      "def": ""
+    },
+    {
+      "label": "编辑提示词",
+      "type": "textarea",
+      "nodeId": "167",
+      "fieldName": "text",
+      "def": "去掉红色变成黑色胡子，"
+    },
+    {
+      "label": "随机种子（-1 每次随机）",
+      "type": "number",
+      "nodeId": "152",
+      "fieldName": "seed",
+      "def": "-1"
+    },
+    {
+      "label": "是否调整输出图片尺寸",
+      "type": "select",
+      "nodeId": "166",
+      "fieldName": "value",
+      "def": "true,false"
+    },
+    {
+      "label": "输出图片短边尺寸调整为",
+      "type": "number",
+      "nodeId": "172",
+      "fieldName": "size",
+      "def": "1024"
+    },
+    {
+      "label": "是否强制填充遮罩为红色",
+      "type": "select",
+      "nodeId": "174",
+      "fieldName": "value",
+      "def": "false,true"
+    }
+  ]
+}
