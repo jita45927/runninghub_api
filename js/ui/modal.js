@@ -7,6 +7,8 @@ import { showStatus } from "./form.js?v=20261109a";
 
 let editingToolId = null;
 let editingFields = [];  // 配置弹窗中正在编辑的字段数组
+let defEditTarget = null;  // 大窗编辑时对应的默认值输入框
+let defEditField = null;   // 大窗编辑时对应的字段对象
 
 // ================= API Key 弹窗 =================
 export function refreshKeyBtn() {
@@ -48,6 +50,7 @@ function renderFieldsEditor() {
       <input type="text" data-k="nodeId" placeholder="如 1" value="${esc(f.nodeId)}">
       <input type="text" data-k="fieldName" placeholder="如 image" value="${esc(f.fieldName)}">
       <input type="text" data-k="def" placeholder="${f.type === "select" ? "选项1,选项2" : "可留空"}" value="${esc(f.def)}">
+      <button class="expand-def" title="弹出大窗口编辑默认值" style="flex:none">⤢</button>
       <button class="del-field" title="删除">✕</button>`;
     row.querySelectorAll("[data-k]").forEach(inp => {
       inp.onchange = () => { f[inp.dataset.k] = inp.value.trim(); };
@@ -55,6 +58,16 @@ function renderFieldsEditor() {
     row.querySelector(".del-field").onclick = () => {
       editingFields.splice(i, 1);
       renderFieldsEditor();
+    };
+    // 默认值放大编辑：弹大窗，保存时回写并同步到字段数据
+    row.querySelector(".expand-def").onclick = () => {
+      const defInput = row.querySelector('[data-k="def"]');
+      defEditTarget = defInput;
+      defEditField = f;
+      document.getElementById("bigDefFieldName").textContent =
+        "输入项：" + (row.querySelector('[data-k="label"]').value || "未命名");
+      document.getElementById("bigDefText").value = defInput.value;
+      document.getElementById("bigDefModal").classList.add("show");
     };
     box.appendChild(row);
   });
@@ -180,6 +193,16 @@ export function initModals(renderAll) {
     document.getElementById("tWebappIdLabel").textContent = e.target.value === "workflow"
       ? "工作流 ID（workflowId，工作流页面「API调用」中可见）"
       : "AI 应用 ID（webappId，应用详情页 URL 或「API调用」中可见）";
+  };
+  // 默认值大窗：保存回写到对应输入框并同步字段数据
+  document.getElementById("bigDefSaveBtn").onclick = () => {
+    if (defEditTarget) {
+      defEditTarget.value = document.getElementById("bigDefText").value;
+      defEditTarget.dispatchEvent(new Event("change"));
+    }
+    document.getElementById("bigDefModal").classList.remove("show");
+    defEditTarget = null;
+    defEditField = null;
   };
   document.getElementById("configToolBtn").onclick = () => { if (state.activeId) openToolModal(state.activeId); };
   document.getElementById("addToolBtn").onclick = () => openToolModal(null);
