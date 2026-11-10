@@ -1,13 +1,13 @@
 {
   "type": "runninghub-tool-config",
   "version": 1,
-  "name": "效果图转绘渲染-内核V2",
+  "name": "SU转效果图-香蕉2.1-官方版",
   "icon": "🏗️",
-  "desc": "上传效果图/草图，按提示词转绘为写实风格渲染图（Nano Banana2 图生图）；可调整输入图比例、分辨率与随机种子",
-  "toolType": "workflow",
-  "webappId": "2031509766647844865",
+  "desc": "上传效果图/草图，按提示词转绘为写实风格渲染图；输出图比例需与输入图比例同步以保证像素对齐",
+  "toolType": "app",
+  "webappId": "2120242088238473218",
   "instanceType": "default",
-  "category": "效果图处理",
+  "category": "效果图转绘",
   "fields": [
     {
       "label": "上传参考图",
@@ -24,39 +24,39 @@
       "def": "图片1变成写实风格的效果图，增强图面表现力，"
     },
     {
-      "label": "调整输入图比例（仅「强制按比例重裁」开启时生效）",
+      "label": "调整输入图比例",
       "type": "select",
       "nodeId": "717",
       "fieldName": "aspect_ratio",
       "def": "16:9 (Widescreen),1:1 (Square),2:3 (Portrait Photo),3:2 (Photo),3:4 (Portrait Standard),4:3 (Standard),9:16 (Portrait Widescreen),21:9 (Ultrawide)"
     },
     {
-      "label": "输入图调整尺寸到百万级",
-      "type": "number",
-      "nodeId": "719",
-      "fieldName": "value",
-      "def": "1.5"
-    },
-    {
-      "label": "强制按比例重裁输入图比例",
+      "label": "输出图比例（要与输入图同步保证像素对齐）",
       "type": "select",
-      "nodeId": "720",
-      "fieldName": "switch",
-      "def": "false,true"
-    },
-    {
-      "label": "随机种子",
-      "type": "number",
-      "nodeId": "721",
-      "fieldName": "seed",
-      "def": "529114360"
+      "nodeId": "727",
+      "fieldName": "aspectRatio",
+      "def": "16:9,1:1,9:16,4:3,3:4,3:2,2:3,5:4,4:5,21:9,1:4,4:1,1:8,8:1"
     },
     {
       "label": "出图尺寸",
       "type": "select",
-      "nodeId": "721",
+      "nodeId": "727",
       "fieldName": "resolution",
       "def": "1k,2k,4k"
+    },
+    {
+      "label": "思维级别",
+      "type": "select",
+      "nodeId": "727",
+      "fieldName": "thinkingLevel",
+      "def": "medium,minimal,high"
+    },
+    {
+      "label": "重置输入图尺寸到百万级",
+      "type": "number",
+      "nodeId": "719",
+      "fieldName": "value",
+      "def": "1.5"
     }
   ]
 }

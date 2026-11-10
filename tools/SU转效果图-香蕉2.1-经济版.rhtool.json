@@ -1,0 +1,55 @@
+{
+  "type": "runninghub-tool-config",
+  "version": 1,
+  "name": "SU转效果图-香蕉2.1-经济版",
+  "icon": "🏗️",
+  "desc": "上传效果图/草图，按提示词转绘为写实风格渲染图；输出图比例需与输入图比例同步以保证像素对齐",
+  "toolType": "app",
+  "webappId": "2120239330638782465",
+  "instanceType": "default",
+  "category": "效果图转绘",
+  "fields": [
+    {
+      "label": "上传参考图",
+      "type": "image",
+      "nodeId": "709",
+      "fieldName": "image",
+      "def": ""
+    },
+    {
+      "label": "转绘提示词",
+      "type": "textarea",
+      "nodeId": "716",
+      "fieldName": "text",
+      "def": "图片1变成写实风格的效果图，增强图面表现力，"
+    },
+    {
+      "label": "调整输入图比例",
+      "type": "select",
+      "nodeId": "717",
+      "fieldName": "aspect_ratio",
+      "def": "16:9 (Widescreen),1:1 (Square),2:3 (Portrait Photo),3:2 (Photo),3:4 (Portrait Standard),4:3 (Standard),9:16 (Portrait Widescreen),21:9 (Ultrawide)"
+    },
+    {
+      "label": "输出图比例（与输入图要同步保证像素对齐）",
+      "type": "select",
+      "nodeId": "724",
+      "fieldName": "aspectRatio",
+      "def": "16:9,1:1,9:16,4:3,3:4,3:2,2:3,5:4,4:5,21:9,1:4,4:1,1:8,8:1"
+    },
+    {
+      "label": "输出图尺寸",
+      "type": "select",
+      "nodeId": "724",
+      "fieldName": "resolution",
+      "def": "1k,2k,4k"
+    },
+    {
+      "label": "输入图缩放到百万像素级",
+      "type": "number",
+      "nodeId": "719",
+      "fieldName": "value",
+      "def": "1.5"
+    }
+  ]
+}
