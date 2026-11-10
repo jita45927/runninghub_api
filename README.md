@@ -1,6 +1,6 @@
 # RunningHub AI 工具箱
 
-一个纯前端的可视化工具，通过 RunningHub v2 OpenAPI 调用你在 RunningHub 上发布的 AI 应用/工作流。上传图片、填提示词、点运行，生成结果自动保存到本地。
+一个纯前端的可视化工具，通过 RunningHub v2 OpenAPI 调用 RunningHub 上发布的 AI 应用/工作流。上传图片、填提示词、点运行，生成结果自动保存到本地。
 
 **无需安装任何东西**：`index.html` 双击即可在浏览器中使用（推荐 Edge / Chrome）。
 
