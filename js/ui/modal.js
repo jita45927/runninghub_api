@@ -7,8 +7,19 @@ import { showStatus } from "./form.js?v=20261109a";
 
 let editingToolId = null;
 let editingFields = [];  // 配置弹窗中正在编辑的字段数组
-let defEditTarget = null;  // 大窗编辑时对应的默认值输入框
-let defEditField = null;   // 大窗编辑时对应的字段对象
+let bigEditTarget = null;  // 大窗编辑时对应的输入框
+
+// 打开大文本编辑窗（默认值 / 输入项名称 / 功能描述 共用）
+function openBigEditor(targetEl, title, subText, height) {
+  bigEditTarget = targetEl;
+  document.getElementById("bigDefTitle").textContent = title;
+  document.getElementById("bigDefFieldName").textContent = subText || "";
+  const ta = document.getElementById("bigDefText");
+  ta.value = targetEl.value;
+  ta.style.height = (height || 320) + "px";
+  document.getElementById("bigDefModal").classList.add("show");
+  ta.focus();
+}
 
 // ================= API Key 弹窗 =================
 export function refreshKeyBtn() {
@@ -44,7 +55,7 @@ function renderFieldsEditor() {
     const row = document.createElement("div");
     row.className = "field-edit-row";
     row.innerHTML = `
-      <input type="text" data-k="label" placeholder="如：上传图片" value="${esc(f.label)}">
+      <input type="text" data-k="label" placeholder="如：上传图片（点击编辑）" value="${esc(f.label)}" readonly title="点击弹出大窗口编辑" style="cursor:pointer">
       <select data-k="type">${Object.keys(FIELD_TYPES).map(k =>
         `<option value="${k}" ${f.type === k ? "selected" : ""}>${FIELD_TYPES[k]}</option>`).join("")}</select>
       <input type="text" data-k="nodeId" placeholder="如 1" value="${esc(f.nodeId)}">
@@ -58,14 +69,14 @@ function renderFieldsEditor() {
       editingFields.splice(i, 1);
       renderFieldsEditor();
     };
-    // 点击默认值输入框 → 弹出大窗口编辑
+    // 点击输入项名称 / 默认值 → 弹出大窗口编辑
+    row.querySelector('[data-k="label"]').onclick = e => {
+      openBigEditor(e.target, "编辑输入项名称", "显示在工具界面上的名称", 120);
+    };
     row.querySelector('[data-k="def"]').onclick = e => {
-      defEditTarget = e.target;
-      defEditField = f;
-      document.getElementById("bigDefFieldName").textContent =
-        "输入项：" + (row.querySelector('[data-k="label"]').value || "未命名");
-      document.getElementById("bigDefText").value = e.target.value;
-      document.getElementById("bigDefModal").classList.add("show");
+      openBigEditor(e.target, "编辑默认值",
+        "输入项：" + (row.querySelector('[data-k="label"]').value || "未命名"),
+        f.type === "select" ? 120 : 320);
     };
     box.appendChild(row);
   });
@@ -192,15 +203,26 @@ export function initModals(renderAll) {
       ? "工作流 ID（workflowId，工作流页面「API调用」中可见）"
       : "AI 应用 ID（webappId，应用详情页 URL 或「API调用」中可见）";
   };
-  // 默认值大窗：保存回写到对应输入框并同步字段数据
+  // 点击功能描述 → 弹出大窗口编辑
+  document.getElementById("tDesc").onclick = e => {
+    openBigEditor(e.target, "编辑功能描述", "一句话说明这个工具做什么", 140);
+  };
+  // 配置说明帮助
+  document.getElementById("toolHelpBtn").onclick = () => {
+    document.getElementById("toolHelpModal").classList.add("show");
+  };
+  // 免责声明
+  document.getElementById("disclaimerBtn").onclick = () => {
+    document.getElementById("disclaimerModal").classList.add("show");
+  };
+  // 大编辑窗：保存回写到对应输入框并同步数据
   document.getElementById("bigDefSaveBtn").onclick = () => {
-    if (defEditTarget) {
-      defEditTarget.value = document.getElementById("bigDefText").value;
-      defEditTarget.dispatchEvent(new Event("change"));
+    if (bigEditTarget) {
+      bigEditTarget.value = document.getElementById("bigDefText").value;
+      bigEditTarget.dispatchEvent(new Event("change"));
     }
     document.getElementById("bigDefModal").classList.remove("show");
-    defEditTarget = null;
-    defEditField = null;
+    bigEditTarget = null;
   };
   document.getElementById("configToolBtn").onclick = () => { if (state.activeId) openToolModal(state.activeId); };
   document.getElementById("addToolBtn").onclick = () => openToolModal(null);

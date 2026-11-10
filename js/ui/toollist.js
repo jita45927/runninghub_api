@@ -3,9 +3,27 @@ import { state, saveTools, saveActiveId, saveCats } from "../store.js?v=20261109
 import { toolsDirGranted, deleteToolFromDir } from "../tools.js?v=20261109a";
 import { showStatus } from "./form.js?v=20261109a";
 
+// 左侧列表内拖动排序：只允许在同一分类内调整先后
+let dragToolId = null;
+
+function catOf(t) { return (t.category || "").trim() || "未分类"; }
+
+// 把 srcId 移动到 dstId 之前（after=true 时为之后）
+function moveTool(srcId, dstId, after) {
+  if (!srcId || srcId === dstId) return;
+  const from = state.tools.findIndex(x => x.id === srcId);
+  const target = state.tools.findIndex(x => x.id === dstId);
+  if (from < 0 || target < 0) return;
+  const [moved] = state.tools.splice(from, 1);
+  const base = state.tools.findIndex(x => x.id === dstId);
+  state.tools.splice(after ? base + 1 : base, 0, moved);
+  saveTools();
+}
+
 // 单个工具条目（DOM 构建，防注入）
 function buildToolItem(t, renderAll) {
-  const configured = t.webappId && t.fields && t.fields.length && t.fields.every(f => f.nodeId);
+  // 有应用ID即视为已配置；零输入项的工具也合法（直接提交空 nodeInfoList）
+  const configured = !!t.webappId && t.fields.every(f => f.nodeId);
   const el = document.createElement("div");
   el.className = "tool-item" + (t.id === state.activeId ? " active" : "");
   const iconEl = document.createElement("div");
@@ -48,6 +66,42 @@ function buildToolItem(t, renderAll) {
     if (state.activeId) state.toolResults[state.activeId] = document.getElementById("resultArea").innerHTML;
     state.activeId = t.id; saveActiveId(); renderAll();
   };
+
+  // ===== 拖动排序 =====
+  el.draggable = true;
+  el.addEventListener("dragstart", e => {
+    dragToolId = t.id;
+    el.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", t.id);  // Firefox 需要设置数据才能拖动
+  });
+  el.addEventListener("dragend", () => {
+    dragToolId = null;
+    el.classList.remove("dragging");
+    document.querySelectorAll(".tool-item.drop-before, .tool-item.drop-after")
+      .forEach(x => x.classList.remove("drop-before", "drop-after"));
+  });
+  el.addEventListener("dragover", e => {
+    if (!dragToolId || dragToolId === t.id) return;
+    const src = state.tools.find(x => x.id === dragToolId);
+    if (!src || catOf(src) !== catOf(t)) return;  // 跨分类不排序
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const r = el.getBoundingClientRect();
+    const after = e.clientY > r.top + r.height / 2;
+    el.classList.toggle("drop-after", after);
+    el.classList.toggle("drop-before", !after);
+  });
+  el.addEventListener("dragleave", () => el.classList.remove("drop-before", "drop-after"));
+  el.addEventListener("drop", e => {
+    e.preventDefault();
+    const after = el.classList.contains("drop-after");
+    el.classList.remove("drop-before", "drop-after");
+    const srcId = dragToolId;
+    dragToolId = null;
+    moveTool(srcId, t.id, after);
+    renderAll();
+  });
   return el;
 }
 

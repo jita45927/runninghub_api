@@ -29,11 +29,12 @@
 <div class="layout">
   <!-- 左侧工具列表 -->
   <div class="sidebar">
-    <div class="sidebar-title">我的工具</div>
+    <div class="sidebar-title">我的工具<span class="sidebar-tip">拖动可排序</span></div>
     <div class="tool-list" id="toolList"></div>
     <div class="add-tool" id="addToolBtn">＋ 添加工具</div>
     <div class="add-tool" id="importToolBtn" style="margin-top:0">📥 导入配置文件</div>
     <div class="add-tool" id="toolsDirBtn" style="margin-top:0">🗂 配置目录：未授权</div>
+    <div class="sidebar-foot"><a id="disclaimerBtn">⚠️ 免责声明</a></div>
     <input type="file" id="importFileInput" accept=".json" style="display:none">
   </div>
 
@@ -129,7 +130,7 @@
     </div>
     <div class="field">
       <label>功能描述</label>
-      <input type="text" id="tDesc" placeholder="一句话说明这个工具做什么">
+      <input type="text" id="tDesc" placeholder="一句话说明这个工具做什么（点击编辑）" readonly title="点击弹出大窗口编辑" style="cursor:pointer">
     </div>
     <div class="field">
       <label>分类（可选，用于左侧分组管理，留空归入「未分类」）</label>
@@ -157,6 +158,7 @@
     <div class="modal-actions">
       <div style="display:flex;gap:10px">
         <button class="btn danger" id="deleteToolBtn">删除此工具</button>
+        <button class="btn ghost" id="toolHelpBtn">📖 配置说明</button>
       </div>
       <div class="right">
         <button class="btn ghost" data-close="toolModal">取消</button>
@@ -166,10 +168,140 @@
   </div>
 </div>
 
-<!-- 默认值大文本编辑弹窗 -->
+<!-- 配置说明帮助弹窗 -->
+<div class="modal-mask" id="toolHelpModal">
+  <div class="modal" style="width:820px">
+    <h3>📖 工具配置说明</h3>
+    <div class="modal-sub">照着下面的步骤操作，几分钟就能配好一个工具。内容较多可上下滚动。</div>
+    <div class="help-doc">
+
+      <h4>一、你在这里配的到底是什么</h4>
+      <p>工具界面上的每个输入框，最终都会被转换成 RunningHub 的 <b>nodeInfoList</b> 参数发给接口：</p>
+      <pre><code>{ "nodeId": "节点ID", "fieldName": "字段名", "fieldValue": "填进去的值" }</code></pre>
+      <p>所以在配置窗口里，<b>一行「输入项」= nodeInfoList 里的一个元素</b>。图片类的值会由工具先上传、再自动替换成返回的文件名，你不用手填。</p>
+
+      <h4>二、开始前准备</h4>
+      <ul>
+        <li>顶栏 🔑 已填好 API Key；</li>
+        <li>本工具可调用平台上<b>已经发布并开放 API 的工作流和应用</b>；调用费用从你自己的钱包 / RH 币中扣除。</li>
+        <li>在该应用 / 工作流的「API 调用」页面能看到请求示例（下一步要用）。</li>
+      </ul>
+
+      <h4>三、基础信息怎么填</h4>
+      <table class="help-table">
+        <tr><th>字段</th><th>说明</th></tr>
+        <tr><td>图标 / 工具名称</td><td>只影响左侧列表的显示，随便起。</td></tr>
+        <tr><td>分类</td><td>左侧分组名，填相同文字的会自动归到一个可折叠的组里；留空则进「未分类」。</td></tr>
+        <tr><td>实例类型</td><td>default(24G) / plus(48G) / ultra(84G)。显存不够（报 OOM）时换更大的。</td></tr>
+        <tr><td>类型</td><td>AI 应用 或 ComfyUI 工作流。<b>选错会报 webapp not exists</b>。</td></tr>
+        <tr><td>ID</td><td>AI 应用填 <b>webappId</b>；工作流填 <b>workflowId</b>。</td></tr>
+      </table>
+      <p><b>webappId 在哪</b>：RunningHub 里打开该应用，浏览器地址栏 /app/ 后面那串数字；或点「API 调用」看示例地址中的 <code>ai-app/{数字}</code>。平台上已发布的应用同理，ID 一样能取到（未开放 API 调用时会报无权限 / 应用不存在）。</p>
+      <p><b>workflowId 在哪</b>：打开工作流 →「API 调用」→ 示例请求地址中的 <code>workflow/{数字}</code>。</p>
+
+      <h4>四、节点ID 和 字段名怎么找（最关键的一步）</h4>
+      <p>在应用的「API 调用」页面，官方会给出类似下面的示例请求体。把其中 <code>nodeInfoList</code> 的每一项，在配置窗口里加一行：</p>
+      <pre><code>{
+  "webappId": "2119272366319685634",
+  "apiKey": "你的Key",
+  "nodeInfoList": [
+    { "nodeId": "1",  "fieldName": "image", "fieldValue": "api/xxxx.png" },
+    { "nodeId": "25", "fieldName": "text",  "fieldValue": "黄昏效果，真实建筑" },
+    { "nodeId": "30", "fieldName": "value", "fieldValue": "2048" }
+  ]
+}</code></pre>
+      <p>对照关系：<b>节点ID = nodeId</b>，<b>字段名 = fieldName</b>，<b>默认值 = fieldValue</b> 的示例值（可留空），<b>显示名称</b>是你自己起的中文名（只影响界面）。</p>
+      <p><b>如果示例里没有 nodeInfoList，或它是空的</b>：说明这个应用没暴露输入参数，直接保存、不用加输入项，点「开始生成」即可；也可以到工作流画布里点开节点，在右侧面板查看参数名（一般是 text / image / seed / value）。</p>
+
+      <h4>五、输入项类型怎么选</h4>
+      <table class="help-table">
+        <tr><th>界面类型</th><th>常见 fieldName</th><th>说明</th></tr>
+        <tr><td>图片上传</td><td>image</td><td>先上传再自动填入返回的 fileName，适用于 LoadImage 节点。</td></tr>
+        <tr><td>多行文本</td><td>text</td><td>提示词、反推提示词等长文本。</td></tr>
+        <tr><td>单行文本</td><td>text / string</td><td>短文本。</td></tr>
+        <tr><td>数字</td><td>value / seed / steps / cfg</td><td>分辨率、步数、强度、种子等。</td></tr>
+        <tr><td>下拉选择</td><td>value</td><td>默认值里写全部候选，用英文逗号分隔，如 <code>true,false</code> 或 <code>1024,1536,2048</code>。</td></tr>
+      </table>
+      <p><b>特殊情况：</b></p>
+      <ul>
+        <li><b>种子</b>：fieldName 一般是 <code>seed</code>；默认值填 <code>-1</code> 表示每次随机，填固定数字可复现同一张图。</li>
+        <li><b>布尔开关</b>：fieldName 通常是 <code>value</code>，值只能是 <code>true</code> 或 <code>false</code>，建议用「下拉选择」类型。</li>
+        <li><b>分辨率</b>：多数节点把尺寸放在一个 number 节点上，fieldName 是 <code>value</code>，单位是像素。</li>
+      </ul>
+
+      <h4>六、完整实例（KLEIN-SU转绘效果图）</h4>
+      <p>类型：AI 应用　ID：2119272366319685634</p>
+      <table class="help-table">
+        <tr><th>显示名称</th><th>类型</th><th>节点ID</th><th>字段名</th><th>默认值</th></tr>
+        <tr><td>上传SU草图</td><td>图片上传</td><td>1</td><td>image</td><td>（空）</td></tr>
+        <tr><td>补充提示词</td><td>多行文本</td><td>25</td><td>text</td><td>黄昏效果，真实建筑</td></tr>
+        <tr><td>反推预设提示词</td><td>多行文本</td><td>49</td><td>text</td><td>把这张草图变成写实照片…</td></tr>
+        <tr><td>出图长边尺寸</td><td>数字</td><td>30</td><td>value</td><td>2048</td></tr>
+      </table>
+      <p>保存后，工具会向接口提交 4 条 nodeInfoList，例如图片那一条的 fieldValue 是上传接口返回的 <code>api/xxx.png</code>。</p>
+
+      <h4>七、保存后会发生什么</h4>
+      <ul>
+        <li>工具立刻出现在左侧列表，可拖动排序、可改分类；</li>
+        <li>已授权「配置目录」时，会同时写入 <code>tools/工具名.rhtool.json</code>，下次启动自动读取；</li>
+        <li>未授权配置目录时，配置只存在浏览器里，换电脑需用「导入配置文件」迁移。</li>
+      </ul>
+
+      <h4>八、常见报错对照</h4>
+      <table class="help-table">
+        <tr><th>提示</th><th>原因与解决</th></tr>
+        <tr><td>webapp not exists</td><td>类型或 ID 填错。工作流 ID 却选了「AI 应用」最常见，检查「类型 + ID」是否匹配。</td></tr>
+        <tr><td>Node info error / 节点信息异常</td><td>节点ID 或 字段名 与工作流对不上。按「API 调用」示例逐个照抄；该工作流不接受空参数时，必须至少配一条输入项。</td></tr>
+        <tr><td>没有可提交的参数</td><td>所有输入项都没填值。填上值，或删掉用不到的输入项。</td></tr>
+        <tr><td>Your balance is insufficient</td><td>钱包余额不足，去 RunningHub 充值或更换有余额的 Key。</td></tr>
+        <tr><td>任务失败 / 一直排队</td><td>应用被下架、实例繁忙或显存不足；稍后重试，或把实例类型调大。</td></tr>
+      </table>
+
+      <h4>九、新手建议</h4>
+      <ul>
+        <li>先只配「1 个图片 + 1 个提示词」跑通，再逐步加参数，出问题好排查；</li>
+        <li>对比效果时用固定种子（如 <code>12345</code>），只改一个参数；</li>
+        <li>长文本不好编辑时，直接点输入框，会弹出大窗口编辑；</li>
+        <li>跑错了立刻点「⏹ 立即取消」，避免继续产生费用。</li>
+      </ul>
+    </div>
+    <div class="modal-actions">
+      <div></div>
+      <div class="right">
+        <button class="btn ghost" data-close="toolHelpModal">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 免责声明弹窗 -->
+<div class="modal-mask" id="disclaimerModal">
+  <div class="modal" style="width:760px">
+    <h3>⚠️ 免责声明</h3>
+    <div class="modal-sub">使用本工具前请仔细阅读，内容较多可上下滚动</div>
+    <div class="help-doc">
+      <p>1. 本工具是一个第三方的本地辅助工具，<b>与 RunningHub 官方无关</b>，不是官方产品，也未获得官方背书。</p>
+      <p>2. 本工具不包含任何 API Key。<b>API Key 由使用者自行填写</b>，仅保存在使用者本机浏览器中，不会上传给本工具作者或任何第三方。</p>
+      <p>3. 所有 AI 生成任务均通过 <b>RunningHub 官方 API</b> 执行，所产生的费用由使用者自己的账号承担。请自行留意余额与任务消耗，任务跑错请及时点「⏹ 立即取消」。</p>
+      <p>4. 生成结果（图片、视频等）的<b>内容合法性、版权与使用后果由使用者自行负责</b>。严禁用于生成违反法律法规、侵犯他人权利、色情暴力或其他不当内容；请遵守 RunningHub 服务条款及所在地法律法规。</p>
+      <p>5. 本工具调用的 AI 应用、ComfyUI 工作流及其素材，其权利归各自作者所有。如权利人认为存在侵权，请联系本工具作者删除相关内容。</p>
+      <p>6. 生成结果的链接通常<b>仅 24 小时有效</b>，请及时下载保存。因未保存、链接过期、浏览器清理或系统故障导致的文件丢失，本工具作者不承担责任。</p>
+      <p>7. 本工具按<b>「现状」</b>提供，作者不对可用性、稳定性、生成效果、数据完整性作任何明示或暗示的担保。因使用或无法使用本工具造成的任何直接或间接损失（包括但不限于费用损失、数据丢失、业务中断），作者不承担责任。</p>
+      <p>8. 使用者开始使用本工具，即视为<b>已阅读并同意</b>本免责声明；如不同意，请立即停止使用并删除本工具及全部相关文件。</p>
+    </div>
+    <div class="modal-actions">
+      <div></div>
+      <div class="right">
+        <button class="btn ghost" data-close="disclaimerModal">我已了解</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 大文本编辑弹窗（默认值 / 输入项名称 / 功能描述 共用） -->
 <div class="modal-mask" id="bigDefModal" style="z-index:150">
   <div class="modal" style="width:640px">
-    <h3>编辑默认值</h3>
+    <h3 id="bigDefTitle">编辑默认值</h3>
     <div class="modal-sub" id="bigDefFieldName"></div>
     <textarea id="bigDefText" style="width:100%;height:320px;resize:vertical;background:var(--inp-bg,#161b22);color:inherit;border:1px solid var(--border,#30363d);border-radius:8px;padding:10px;font-size:13px;line-height:1.6;font-family:inherit"></textarea>
     <div class="modal-actions">
@@ -213,6 +345,47 @@
       </div>
     </div>
   </div>
+</div>
+
+<!-- 蒙版编辑器（对齐 ComfyUI MaskEditor：涂抹区域导出为透明 alpha，作为 MASK） -->
+<div class="mask-editor" id="maskEditor">
+  <div class="me-toolbar">
+    <div class="me-group">
+      <button class="me-btn active" id="meBrush" title="画笔 (B)">🖌️ 画笔</button>
+      <button class="me-btn" id="meErase" title="橡皮 (E)">🧽 橡皮</button>
+      <button class="me-btn" id="meUndo" title="撤销 (Ctrl+Z)">↶ 撤销</button>
+      <button class="me-btn" id="meClear" title="清除全部涂抹">🗑 清除</button>
+    </div>
+    <div class="me-group">
+      <span class="me-label">笔刷</span>
+      <input type="range" id="meSize" min="4" max="200" step="1" value="40">
+      <span class="me-val" id="meSizeVal">40px</span>
+    </div>
+    <div class="me-group">
+      <span class="me-label">羽化</span>
+      <input type="range" id="meFeather" min="0" max="100" step="1" value="0">
+      <span class="me-val" id="meFeatherVal">0%</span>
+    </div>
+    <div class="me-group">
+      <button class="me-btn" id="mePaintMode" title="关闭：输出原图 + 黑白蒙版；开启：把蒙版按所选颜色叠加进输出图片，蒙版仍按涂抹输出">🎨 绘制到图片层</button>
+      <div class="me-colors" id="meColors">
+        <button class="me-color active" data-color="#ff3333" style="background:#ff3333" title="红"></button>
+        <button class="me-color" data-color="#3377ff" style="background:#3377ff" title="蓝"></button>
+        <button class="me-color" data-color="#33cc55" style="background:#33cc55" title="绿"></button>
+        <button class="me-color" data-color="#ffd400" style="background:#ffd400" title="黄"></button>
+        <button class="me-color" data-color="#ff33cc" style="background:#ff33cc" title="洋红"></button>
+        <button class="me-color" data-color="#22d3ee" style="background:#22d3ee" title="青"></button>
+      </div>
+      <label class="me-check"><input type="checkbox" id="meExportMask" checked> 输出蒙版</label>
+    </div>
+    <div class="me-group me-zoom">🔍 <span id="meZoomVal">100%</span></div>
+    <div class="me-group me-actions">
+      <button class="btn ghost" id="meCancel">取消</button>
+      <button class="btn" id="meSave">保存蒙版</button>
+    </div>
+  </div>
+  <div class="me-stage" id="meStage"><canvas id="meCanvas"></canvas><div class="me-cursor" id="meCursor"></div></div>
+  <div class="me-hint" id="meHint">左键涂抹（颜色仅为预览；保存时按「绘制到图片层」决定是否把蒙版按颜色叠加进图片）· 中键/右键拖动平移 · 滚轮缩放</div>
 </div>
 
 <!-- 图片预览灯箱 -->

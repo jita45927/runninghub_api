@@ -1,0 +1,41 @@
+{
+  "type": "runninghub-tool-config",
+  "version": 1,
+  "name": "Z-image-turbo文生图",
+  "icon": "🧩",
+  "desc": "文生图：提示词 + 画面尺寸 + 光效 LORA 强度",
+  "toolType": "app",
+  "webappId": "2120130628074164226",
+  "instanceType": "default",
+  "category": "文生图",
+  "fields": [
+    {
+      "label": "提示词",
+      "type": "textarea",
+      "nodeId": "16",
+      "fieldName": "text",
+      "def": ""
+    },
+    {
+      "label": "图像宽度",
+      "type": "number",
+      "nodeId": "23",
+      "fieldName": "width",
+      "def": "1024"
+    },
+    {
+      "label": "图像高度",
+      "type": "number",
+      "nodeId": "23",
+      "fieldName": "height",
+      "def": "1536"
+    },
+    {
+      "label": "光效增强 LORA 强度",
+      "type": "number",
+      "nodeId": "79",
+      "fieldName": "strength_model",
+      "def": "1"
+    }
+  ]
+}

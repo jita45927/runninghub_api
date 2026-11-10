@@ -2,7 +2,7 @@
   "type": "runninghub-tool-config",
   "version": 1,
   "name": "KLEIN-超分放大修复LORA版-适用于效果图",
-  "icon": "🧩",
+  "icon": "🔍",
   "desc": "适合修复AI生成的1K图片，解决SEEDVR2修复不好的图，适合修复效果图，人像修复欠佳",
   "toolType": "workflow",
   "webappId": "2054488672979955714",

@@ -2,6 +2,15 @@
 import { esc } from "../config.js?v=20261109a";
 import { state, activeTool, idbSet } from "../store.js?v=20261109a";
 import { openLightbox, previewUrlFor } from "./lightbox.js?v=20261109a";
+import { openMaskEditor, clearMaskCache } from "./maskeditor.js?v=20261110a";
+
+// 每个图片字段的原始图片（未烧蒙版），再次编辑蒙版时以干净底图重画，保证"清除"有效
+const fieldBaseFiles = new Map();
+// 每个图片字段保存蒙版时的信息：颜色用于预览填充，开关状态用于在按钮下方显示说明
+const fieldMaskInfo = new Map();
+// 蒙版预览图（颜色已合成），供灯箱预览复用
+const fieldPreviewUrls = new Map();
+const baseKey = idx => (activeTool() ? activeTool().id : "tool") + "_" + idx;
 
 // ================= 状态栏 =================
 export function showStatus(text, type) {
@@ -54,7 +63,10 @@ export function renderWorkspace() {
     ua.onclick = () => {
       if (!state.fieldFiles[i]) { pickImageField(i, fi); return; }
       clearTimeout(ua._clickTimer);
-      ua._clickTimer = setTimeout(() => { if (state.fieldFiles[i]) openLightbox(previewUrlFor(state.fieldFiles[i])); }, 260);
+      ua._clickTimer = setTimeout(() => {
+        if (!state.fieldFiles[i]) return;
+        openLightbox(fieldPreviewUrls.get(baseKey(i)) || previewUrlFor(state.fieldFiles[i]));
+      }, 260);
     };
     ua.ondblclick = () => { clearTimeout(ua._clickTimer); pickImageField(i, fi); };
     fi.onchange = e => { if (e.target.files[0]) pickFile(i, e.target.files[0]); };
@@ -76,7 +88,7 @@ export function renderWorkspace() {
     const reader = new FileReader();
     reader.onload = ev => {
       const ua = document.getElementById("ua_" + i);
-      if (ua) renderImgPreview(ua, ev.target.result);
+      if (ua) renderImgPreview(ua, ev.target.result, i);
     };
     reader.readAsDataURL(state.fieldFiles[i]);
   });
@@ -99,19 +111,63 @@ async function pickImageField(i, fi) {
 }
 
 // 显示图片预览及其像素尺寸
-function renderImgPreview(ua, dataUrl) {
+function renderImgPreview(ua, dataUrl, fieldIdx) {
   const img = new Image();
   img.onload = () => {
-    ua.innerHTML = `<img src="${dataUrl}"><div class="img-dim">📐 ${img.naturalWidth} × ${img.naturalHeight} px<br><small style="color:#8a93a8;font-size:11px">单击预览，双击更改图片</small></div>`;
+    // 蒙版图：透明区域用保存时所选颜色填充预览，避免显示成透明/棋盘格
+    const info = fieldMaskInfo.get(baseKey(fieldIdx));
+    const color = info ? info.color : null;
+    const src = color ? colorizedPreview(img, color) : dataUrl;
+    if (color) fieldPreviewUrls.set(baseKey(fieldIdx), src);
+    else fieldPreviewUrls.delete(baseKey(fieldIdx));
+    const modeText = info ? maskModeText(info) : "";
+    ua.innerHTML = `<img src="${src}"><div class="img-dim">📐 ${img.naturalWidth} × ${img.naturalHeight} px<br><small style="color:#8a93a8;font-size:11px">单击预览，双击更改图片</small><br><button type="button" class="mask-edit-btn">✏️ 绘制蒙版</button>${modeText ? `<div class="img-mask-state">${modeText}</div>` : ""}</div>`;
+    const btn = ua.querySelector(".mask-edit-btn");
+    if (btn) btn.onclick = e => {
+      e.stopPropagation();  // 避免冒泡触发单击灯箱预览
+      const key = baseKey(fieldIdx);
+      const base = fieldBaseFiles.get(key) || state.fieldFiles[fieldIdx];
+      openMaskEditor(base, (file, info) => {
+        if (!fieldBaseFiles.has(key)) fieldBaseFiles.set(key, base);  // 记住原图
+        fieldMaskInfo.set(key, info || null);
+        state.fieldFiles[fieldIdx] = file;
+        const r = new FileReader();
+        r.onload = ev => renderImgPreview(ua, ev.target.result, fieldIdx);
+        r.readAsDataURL(file);
+        showStatus("已生成含蒙版的图片（透明区域即 Mask），保存后会随图片一起提交", "ok");
+      }, key);
+    };
   };
   img.src = dataUrl;
+}
+
+// 蒙版预览图：透明区域填充成所选颜色（模拟最终叠加效果，不显示棋盘格）
+function colorizedPreview(img, color) {
+  const c = document.createElement("canvas");
+  c.width = img.naturalWidth;
+  c.height = img.naturalHeight;
+  const g = c.getContext("2d");
+  g.fillStyle = color;
+  g.fillRect(0, 0, c.width, c.height);
+  g.drawImage(img, 0, 0);
+  return c.toDataURL("image/png");
+}
+
+// 蒙版状态说明：是否把蒙版按颜色叠加进图片 / 是否输出蒙版
+function maskModeText(info) {
+  return (info.paintMode ? "绘制到图片层" : "不修改原图") + "，" +
+         (info.exportMask ? "输出蒙版" : "不输出蒙版");
 }
 
 function pickFile(fieldIdx, file) {
   if (!file.type.startsWith("image/")) { showStatus("请选择图片文件", "error"); return; }
   if (file.size > 30 * 1024 * 1024) { showStatus("图片不能超过 30MB", "error"); return; }
   state.fieldFiles[fieldIdx] = file;
+  fieldBaseFiles.set(baseKey(fieldIdx), file);  // 换图后重置底图，蒙版从头开始
+  fieldMaskInfo.delete(baseKey(fieldIdx));      // 换图后不再用旧颜色/状态预览蒙版
+  fieldPreviewUrls.delete(baseKey(fieldIdx));
+  clearMaskCache(baseKey(fieldIdx));            // 换图后丢弃上一个蒙版
   const reader = new FileReader();
-  reader.onload = ev => renderImgPreview(document.getElementById("ua_" + fieldIdx), ev.target.result);
+  reader.onload = ev => renderImgPreview(document.getElementById("ua_" + fieldIdx), ev.target.result, fieldIdx);
   reader.readAsDataURL(file);
 }
