@@ -105,6 +105,28 @@ function initToolsDirButton() {
 document.getElementById("runBtn").onclick = runActiveTool;
 document.getElementById("cancelBtn").onclick = cancelCurrentRun;
 
+// 推广条：复制 GitHub 仓库地址
+(function initRepoCopy() {
+  const btn = document.getElementById("repoCopyBtn");
+  const REPO_URL = "https://github.com/jita45927/runninghub_api";
+  btn.onclick = async () => {
+    let ok = false;
+    try { await navigator.clipboard.writeText(REPO_URL); ok = true; }
+    catch (e) {
+      // 剪贴板 API 不可用时的降级方案
+      const ta = document.createElement("textarea");
+      ta.value = REPO_URL; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      try { ok = document.execCommand("copy"); } catch (e2) {}
+      ta.remove();
+    }
+    const orig = btn.textContent;
+    btn.textContent = ok ? "✅ 已复制" : "❌ 复制失败";
+    btn.classList.add("copied");
+    setTimeout(() => { btn.textContent = orig; btn.classList.remove("copied"); }, 1500);
+  };
+})();
+
 initLightbox();
 initModals(renderAll);
 initSetupWizard({ grantToolsDir, grantDownloadDir });
