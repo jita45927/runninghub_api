@@ -7,7 +7,7 @@
   "toolType": "workflow",
   "webappId": "2054488672979955714",
   "instanceType": "default",
-  "category": "效果图处理",
+  "category": "超分放大",
   "fields": [
     {
       "label": "上传图片",

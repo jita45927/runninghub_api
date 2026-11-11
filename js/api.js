@@ -1,5 +1,5 @@
 // ================= RunningHub v2 API 层（纯接口请求，不含任何 DOM 操作） =================
-import { LS } from "./config.js?v=20261109a";
+import { LS } from "./config.js?v=20261112e";
 
 export function base() { return localStorage.getItem(LS.site) || "https://www.runninghub.cn"; }
 export function apiKey() { return localStorage.getItem(LS.key) || ""; }
@@ -15,14 +15,15 @@ export async function parseRespJson(resp) {
   return json;
 }
 
-// 上传图片，返回 fileName
-export async function uploadImage(file) {
+// 上传图片，返回 fileName（signal 用于取消时中断上传请求）
+export async function uploadImage(file, signal) {
   const fd = new FormData();
   fd.append("file", file);
   const resp = await fetch(base() + "/openapi/v2/media/upload/binary", {
     method: "POST",
     headers: { "Authorization": "Bearer " + apiKey() },
-    body: fd
+    body: fd,
+    signal
   });
   const json = await parseRespJson(resp);
   if (json.code !== 0) throw new Error("图片上传失败：" + (json.message || json.msg || JSON.stringify(json)));
@@ -30,12 +31,13 @@ export async function uploadImage(file) {
 }
 
 // 提交任务：AI 应用和 ComfyUI 工作流走不同的 v2 端点（nodeInfoList 由表单字段动态组装）
-export async function createTask(tool, nodeInfoList) {
+export async function createTask(tool, nodeInfoList, signal) {
   const path = tool.toolType === "workflow" ? "/openapi/v2/run/workflow/" : "/openapi/v2/run/ai-app/";
   const resp = await fetch(base() + path + tool.webappId, {
     method: "POST",
     headers: authHeaders(),
-    body: JSON.stringify({ nodeInfoList, instanceType: tool.instanceType || "default" })
+    body: JSON.stringify({ nodeInfoList, instanceType: tool.instanceType || "default" }),
+    signal
   });
   const json = await parseRespJson(resp);
   if (!json.taskId) throw new Error("任务创建失败：" + (json.errorMessage || json.message || JSON.stringify(json)));

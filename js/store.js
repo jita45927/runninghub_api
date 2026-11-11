@@ -1,6 +1,6 @@
 // ================= 状态与存储层 =================
 // localStorage（带损坏兜底）+ IndexedDB（记住目录/文件句柄）+ 跨模块共享的可变状态
-import { LS, DEFAULT_TOOLS } from "./config.js?v=20261109a";
+import { LS, DEFAULT_TOOLS } from "./config.js?v=20261112e";
 
 // 跨模块共享状态（简单可变对象，各模块直接读写）
 export const state = {
@@ -8,9 +8,11 @@ export const state = {
   activeId: null,        // 当前选中工具 id
   fieldFiles: {},        // 当前工具各图片字段已选的 File 对象（指向 fieldFilesByTool[当前工具id]）
   fieldFilesByTool: {},  // 每个工具各自的已选图片，切换工具后保留
+  fieldValuesByTool: {}, // 每个工具本次运行期间改过的参数（按 nodeId|fieldName 记录），切换工具后恢复，刷新页面回到默认值
   toolResults: {},       // 每个工具各自的生成结果（按工具 id 隔离）
-  currentRun: null,      // 当前运行中的任务 {taskId, cancelled}
+  currentRun: null,      // 当前运行中的任务 {taskId, cancelled, abortCtrl}
   runningToolId: null,   // 当前运行中任务所属的工具 id（用于阻止删除运行中的工具）
+  lastDoneToolId: null,  // 最近一次成功完成生成的工具 id（左侧列表绿色高亮）
   dirHandle: null,       // 自定义下载目录句柄
   lastImgHandle: null,   // 上次选图所在位置（用于 showOpenFilePicker 的 startIn）
   toolsDirHandle: null,  // 配置目录（tools/）句柄，授权后 tools 目录成为工具配置唯一数据源
@@ -42,6 +44,13 @@ export function activeTool() { return state.tools.find(t => t.id === state.activ
 try { state.collapsedCats = JSON.parse(localStorage.getItem("rhtool_cats_v1") || "[]"); }
 catch (e) { state.collapsedCats = []; }
 export function saveCats() { localStorage.setItem("rhtool_cats_v1", JSON.stringify(state.collapsedCats)); }
+
+// 最近完成工具持久化（刷新页面后仍保留绿色高亮）
+try { state.lastDoneToolId = localStorage.getItem("rhtool_last_done_v1") || null; } catch (e) {}
+if (!state.tools.some(t => t.id === state.lastDoneToolId)) state.lastDoneToolId = null;
+export function saveLastDone() {
+  try { localStorage.setItem("rhtool_last_done_v1", state.lastDoneToolId || ""); } catch (e) {}
+}
 
 // ================= 极简 IndexedDB 封装，用于记住用户选择的目录/文件位置 =================
 function idb() {

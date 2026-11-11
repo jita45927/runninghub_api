@@ -1,9 +1,9 @@
 // ================= API Key 弹窗与工具配置弹窗（含输入项编辑器、导入导出入口） =================
-import { LS, FIELD_TYPES, ICON_OPTIONS, esc } from "../config.js?v=20261109a";
-import { state, saveTools, saveActiveId } from "../store.js?v=20261109a";
-import { getAccountStatus } from "../api.js?v=20261109a";
-import { importToolFile, toolsDirGranted, writeToolToDir, deleteToolFromDir } from "../tools.js?v=20261109a";
-import { showStatus } from "./form.js?v=20261109a";
+import { LS, FIELD_TYPES, ICON_OPTIONS, esc } from "../config.js?v=20261112e";
+import { state, saveTools, saveActiveId } from "../store.js?v=20261112e";
+import { getAccountStatus } from "../api.js?v=20261112e";
+import { importToolFile, toolsDirGranted, writeToolToDir, deleteToolFromDir } from "../tools.js?v=20261112e";
+import { showStatus } from "./form.js?v=20261112e";
 
 let editingToolId = null;
 let editingFields = [];  // 配置弹窗中正在编辑的字段数组
@@ -118,7 +118,7 @@ function setStepState(stepEl, statusEl, ok, dirName, isNext) {
 }
 
 // 刷新向导中两项授权状态，并高亮引导到下一个待授权项
-let toolsPathHintCache = null;  // bat 启动时写入的 tools 目录绝对路径（appinfo.txt）
+let toolsPathHintCache = null;  // bat 启动时写入的 tools 目录绝对路径（appinfo.txt 第一行）
 async function refreshSetupWizard() {
   const supported = !!window.showDirectoryPicker;
   const toolsOk = await toolsDirGranted();
@@ -128,7 +128,10 @@ async function refreshSetupWizard() {
     if (toolsPathHintCache === null) {
       try {
         const r = await fetch("appinfo.txt");
-        toolsPathHintCache = r.ok ? (await r.text()).trim() : "";
+        if (r.ok) {
+          const lines = (await r.text()).split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+          toolsPathHintCache = lines[0] || "";  // 取第一行为 tools 路径，兼容新的两行格式
+        } else { toolsPathHintCache = ""; }
       } catch (e) { toolsPathHintCache = ""; }
     }
     hint.textContent = toolsPathHintCache ? "📂 " + toolsPathHintCache : "";

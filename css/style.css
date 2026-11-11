@@ -34,6 +34,8 @@ body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: va
   color: var(--text); padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 13px;
 }
 .key-btn:hover { border-color: var(--accent); }
+.key-btn.ghost { background: transparent; color: var(--muted); border-style: dashed; }
+.key-btn.ghost:hover { color: var(--text); border-color: var(--accent); }
 .key-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
 .key-dot.ok { background: var(--green); }
 
@@ -67,6 +69,22 @@ body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: va
 .tool-item:hover { background: var(--panel2); }
 .tool-item.active { background: var(--panel2); border-color: var(--accent); }
 .tool-item { position: relative; }
+/* 生成中：橙色渐变底 + 左侧竖条 1.2s 呼吸脉动 */
+.tool-item.running {
+  background: linear-gradient(90deg, #ffb4541f, transparent);
+  border-color: #ffb454;
+}
+.tool-item.running .tool-icon { background: #ffb45426; }
+.tool-item.running::after,
+.tool-item.done::after {
+  content: ""; position: absolute; left: 0; top: 8px; bottom: 8px;
+  width: 3px; border-radius: 0 3px 3px 0;
+}
+.tool-item.running::after { background: #ffb454; animation: toolRunningPulse 1.2s ease-in-out infinite; }
+@keyframes toolRunningPulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+/* 最近完成：绿色左边条，任务结束后保留到下次开始生成 */
+.tool-item.done:not(.active) { border-color: #2c5a45; background: linear-gradient(90deg, #7fd4a814, transparent); }
+.tool-item.done::after { background: var(--green); }
 .tool-item.dragging { opacity: .45; cursor: grabbing; }
 .tool-item.drop-before { box-shadow: inset 0 2px 0 0 var(--accent); }
 .tool-item.drop-after { box-shadow: inset 0 -2px 0 0 var(--accent); }
@@ -83,6 +101,8 @@ body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: va
 .tool-desc { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tool-status { font-size: 10px; color: var(--red); }
 .tool-status.ok { color: var(--green); }
+.tool-status.running { color: #ffb454; }
+.tool-status.done { color: var(--green); }
 .add-tool {
   margin: 10px; padding: 12px; border: 1px dashed var(--border); border-radius: 10px;
   text-align: center; color: var(--muted); cursor: pointer; font-size: 13px;

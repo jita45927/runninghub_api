@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RunningHub AI 工具箱</title>
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=20261112e">
 </head>
 <body>
 
@@ -26,6 +26,7 @@
   <div style="display:flex;gap:10px">
     <button class="key-btn" id="setupBtn">🧭 初始设置</button>
     <button class="key-btn" id="dirBtn">📁 <span id="dirBtnText">下载目录：默认</span></button>
+    <button class="key-btn ghost" id="openDirBtn" style="display:none">🔍 打开下载目录</button>
     <button class="key-btn" id="keyBtn"><span class="key-dot" id="keyDot"></span><span id="keyBtnText">API Key 未设置</span></button>
   </div>
 </div>
@@ -37,6 +38,7 @@
     <div class="tool-list" id="toolList"></div>
     <div class="add-tool" id="addToolBtn">＋ 添加工具</div>
     <div class="add-tool" id="importToolBtn" style="margin-top:0">📥 导入配置文件</div>
+    <div class="add-tool" id="resetToolsBtn" style="margin-top:6px">🔄 重置工具缓存</div>
     <div class="add-tool" id="toolsDirBtn" style="margin-top:0">🗂 配置目录：未授权</div>
     <div class="sidebar-foot"><a id="disclaimerBtn">⚠️ 免责声明</a></div>
     <input type="file" id="importFileInput" accept=".json" style="display:none">
@@ -337,6 +339,7 @@
       <div class="setup-step-body">
         <div class="setup-step-name">下载目录</div>
         <div class="setup-step-desc">生成结果自动保存到这里</div>
+        <div class="setup-step-desc" id="dlAuthHint" style="color:#f0b429;word-break:break-all;white-space:pre-wrap"></div>
       </div>
       <div class="setup-step-status" id="setupDownloadDirStatus">⚠️ 未授权</div>
       <button class="btn ghost" id="grantDownloadDirBtn">去授权</button>
@@ -401,6 +404,6 @@
   </div>
 </div>
 
-<script type="module" src="js/main.js?v=20261111a"></script>
+<script type="module" src="js/main.js?v=20261112e"></script>
 </body>
 </html>

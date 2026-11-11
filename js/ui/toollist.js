@@ -1,12 +1,43 @@
 // ================= 左侧工具列表（按分类分组，可展开/收起） =================
-import { state, saveTools, saveActiveId, saveCats } from "../store.js?v=20261109a";
-import { toolsDirGranted, deleteToolFromDir } from "../tools.js?v=20261109a";
-import { showStatus } from "./form.js?v=20261109a";
+import { state, saveTools, saveActiveId, saveCats } from "../store.js?v=20261112e";
+import { toolsDirGranted, deleteToolFromDir } from "../tools.js?v=20261112e";
+import { showStatus } from "./form.js?v=20261112e";
 
 // 左侧列表内拖动排序：只允许在同一分类内调整先后
 let dragToolId = null;
 
 function catOf(t) { return (t.category || "").trim() || "未分类"; }
+
+// 工具条目状态：运行中（黄）> 最近完成（绿）> 已配置/待配置
+function statusOf(t) {
+  const configured = !!t.webappId && t.fields.every(f => f.nodeId);
+  if (state.runningToolId === t.id && state.currentRun) return { cls: "running", text: "◐ 生成中…" };
+  if (state.lastDoneToolId === t.id) return { cls: "done", text: "✓ 最近完成" };
+  return configured ? { cls: "ok", text: "● 已配置" } : { cls: "", text: "○ 待配置" };
+}
+
+// 记录最近一次 renderAll，运行中的工具若在收起的分类里可自动展开重建
+let lastRenderAll = null;
+
+// 仅刷新各条目的运行/完成高亮与状态文字，不重建列表（供运行状态变化时调用）
+export function refreshToolItemStates() {
+  // 运行中的工具若在收起的分类里，先展开，保证能看到橙色脉动高亮
+  const runTool = state.tools.find(x => x.id === state.runningToolId);
+  if (runTool && state.collapsedCats.includes(catOf(runTool))) {
+    state.collapsedCats = state.collapsedCats.filter(c => c !== catOf(runTool));
+    saveCats();
+    if (lastRenderAll) { lastRenderAll(); return; }
+  }
+  document.querySelectorAll(".tool-item[data-tool-id]").forEach(el => {
+    const t = state.tools.find(x => x.id === el.dataset.toolId);
+    if (!t) return;
+    const st = statusOf(t);
+    el.classList.toggle("running", st.cls === "running");
+    el.classList.toggle("done", st.cls === "done");
+    const s = el.querySelector(".tool-status");
+    if (s) { s.className = "tool-status" + (st.cls ? " " + st.cls : ""); s.textContent = st.text; }
+  });
+}
 
 // 把 srcId 移动到 dstId 之前（after=true 时为之后）
 function moveTool(srcId, dstId, after) {
@@ -22,10 +53,11 @@ function moveTool(srcId, dstId, after) {
 
 // 单个工具条目（DOM 构建，防注入）
 function buildToolItem(t, renderAll) {
-  // 有应用ID即视为已配置；零输入项的工具也合法（直接提交空 nodeInfoList）
-  const configured = !!t.webappId && t.fields.every(f => f.nodeId);
+  const st = statusOf(t);
   const el = document.createElement("div");
-  el.className = "tool-item" + (t.id === state.activeId ? " active" : "");
+  el.className = "tool-item" + (t.id === state.activeId ? " active" : "")
+    + (st.cls === "running" ? " running" : "") + (st.cls === "done" ? " done" : "");
+  el.dataset.toolId = t.id;
   const iconEl = document.createElement("div");
   iconEl.className = "tool-icon";
   iconEl.textContent = t.icon || "🧩";
@@ -38,8 +70,8 @@ function buildToolItem(t, renderAll) {
   descEl.className = "tool-desc";
   descEl.textContent = t.desc || "";
   const statusEl = document.createElement("div");
-  statusEl.className = "tool-status" + (configured ? " ok" : "");
-  statusEl.textContent = configured ? "● 已配置" : "○ 待配置";
+  statusEl.className = "tool-status" + (st.cls ? " " + st.cls : "");
+  statusEl.textContent = st.text;
   metaEl.append(nameEl, descEl, statusEl);
   const delEl = document.createElement("div");
   delEl.className = "tool-del";
@@ -106,6 +138,7 @@ function buildToolItem(t, renderAll) {
 }
 
 export function renderToolList(renderAll) {
+  lastRenderAll = renderAll;
   const list = document.getElementById("toolList");
   list.innerHTML = "";
 

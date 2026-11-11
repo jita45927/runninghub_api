@@ -1,8 +1,9 @@
 // ================= 任务运行流程：组装参数、提交、轮询、取消、自动下载、扣费提示 =================
-import { state, activeTool, saveToDir } from "./store.js?v=20261109a";
-import { apiKey, uploadImage, createTask, queryTask, cancelTask } from "./api.js?v=20261109a";
-import { showStatus } from "./ui/form.js?v=20261109a";
-import { buildResultHtml, bindResultImageDims } from "./ui/results.js?v=20261109a";
+import { state, activeTool, saveToDir, saveLastDone } from "./store.js?v=20261112e";
+import { apiKey, uploadImage, createTask, queryTask, cancelTask } from "./api.js?v=20261112e";
+import { showStatus } from "./ui/form.js?v=20261112e";
+import { buildResultHtml, bindResultImageDims } from "./ui/results.js?v=20261112e";
+import { refreshToolItemStates } from "./ui/toollist.js?v=20261112e";
 
 // 轮询查询任务（v2 查询接口直接返回状态+结果）
 async function waitTask(taskId, onTick) {
@@ -30,7 +31,17 @@ export async function runActiveTool() {
   runBtn.disabled = true;
   const runToolId = tool.id;  // 记录本次运行属于哪个工具，防止运行中切换工具后结果串位
   state.runningToolId = runToolId;
+  // 一开始就建立运行上下文并显示取消按钮：上传阶段也能随时中断
+  const abortCtrl = new AbortController();
+  state.currentRun = { taskId: null, cancelled: false, abortCtrl };
+  const cancelBtn = document.getElementById("cancelBtn");
+  cancelBtn.style.display = ""; cancelBtn.disabled = false;
+  refreshToolItemStates();  // 左侧列表立即显示"生成中"高亮
   document.getElementById("resultArea").innerHTML = '<div class="result-placeholder">生成中…</div>';
+  // 检查是否已被取消（各阶段之间调用，避免取消后继续提交）
+  const throwIfCancelled = () => {
+    if (state.currentRun && state.currentRun.cancelled) throw new DOMException("已取消", "AbortError");
+  };
   try {
     // 逐字段组装 nodeInfoList
     const nodeInfoList = [];
@@ -38,8 +49,10 @@ export async function runActiveTool() {
       const f = tool.fields[i];
       if (f.type === "image") {
         if (!state.fieldFiles[i]) throw new Error("请上传「" + f.label + "」");
-        showStatus("⏫ 正在上传「" + f.label + "」…");
-        const fileName = await uploadImage(state.fieldFiles[i]);
+        throwIfCancelled();
+        showStatus("⏫ 正在上传「" + f.label + "」…（可点「立即取消」中断）");
+        const fileName = await uploadImage(state.fieldFiles[i], abortCtrl.signal);
+        throwIfCancelled();
         nodeInfoList.push({ nodeId: f.nodeId, fieldName: f.fieldName, fieldValue: fileName });
       } else {
         const el = document.getElementById("ff_" + i);
@@ -54,11 +67,15 @@ export async function runActiveTool() {
       throw new Error("没有可提交的参数，请检查工具配置");
     }
 
+    throwIfCancelled();
     showStatus("🚀 正在创建任务…");
-    const taskId = await createTask(tool, nodeInfoList);
-    state.currentRun = { taskId, cancelled: false };
-    const cancelBtn = document.getElementById("cancelBtn");
-    cancelBtn.style.display = ""; cancelBtn.disabled = false;
+    const taskId = await createTask(tool, nodeInfoList, abortCtrl.signal);
+    if (state.currentRun) state.currentRun.taskId = taskId;
+    // 任务已提交成功但用户此刻点了取消：需要同时通知服务端停止，避免继续扣费
+    if (state.currentRun && state.currentRun.cancelled) {
+      try { await cancelTask(taskId); } catch (e) {}
+      throw new DOMException("已取消", "AbortError");
+    }
     showStatus("⏳ 任务运行中（taskId: " + taskId + "）…");
     const { results, usage, cancelled } = await waitTask(taskId, (s, i) => {
       showStatus("⏳ 任务状态：" + (s || "未知") + "（已等待 " + (i * 3 + 3) + " 秒）");
@@ -75,6 +92,9 @@ export async function runActiveTool() {
     const resultHtml = buildResultHtml(results);
     state.toolResults[runToolId] = resultHtml;
     if (state.activeId === runToolId) document.getElementById("resultArea").innerHTML = resultHtml;
+    // 标记最近完成工具（左侧列表绿色高亮，刷新后保留）
+    state.lastDoneToolId = runToolId;
+    saveLastDone();
     // 图片加载完成后回填像素尺寸（仅在仍停留在该工具界面时操作 DOM）
     bindResultImageDims(runToolId);
 
@@ -113,6 +133,13 @@ export async function runActiveTool() {
     }
     showStatus(costText + "。链接24小时内有效，请及时下载", "success");
   } catch (err) {
+    // 用户主动取消（上传/提交阶段被中断）：静默收尾，不显示成错误
+    if (err.name === "AbortError" || (state.currentRun && state.currentRun.cancelled)) {
+      showStatus("⏹ 已取消", "");
+      state.toolResults[runToolId] = '<div class="result-placeholder">已取消</div>';
+      if (state.activeId === runToolId) document.getElementById("resultArea").innerHTML = state.toolResults[runToolId];
+      return;
+    }
     showStatus("❌ " + err.message, "error");
     state.toolResults[runToolId] = '<div class="result-placeholder">生成失败</div>';
     if (state.activeId === runToolId) document.getElementById("resultArea").innerHTML = state.toolResults[runToolId];
@@ -121,16 +148,21 @@ export async function runActiveTool() {
     document.getElementById("cancelBtn").style.display = "none";
     state.currentRun = null;
     state.runningToolId = null;
+    refreshToolItemStates();  // 运行结束：黄色高亮转为"最近完成"或恢复默认
   }
 }
 
-// 立即取消：停止本地轮询 + 通知 RunningHub 停止任务
+// 立即取消：上传阶段直接中断网络请求；已创建任务时再通知 RunningHub 停止
 export async function cancelCurrentRun() {
   if (!state.currentRun || state.currentRun.cancelled) return;
-  state.currentRun.cancelled = true;
+  const run = state.currentRun;
+  run.cancelled = true;
   document.getElementById("cancelBtn").disabled = true;
   showStatus("⏹ 正在取消…");
-  try {
-    await cancelTask(state.currentRun.taskId);
-  } catch (e) { /* 取消请求失败也不影响本地停止 */ }
+  // 中断仍在进行的上传/提交请求，避免流量与时间浪费
+  try { run.abortCtrl && run.abortCtrl.abort(); } catch (e) {}
+  // 任务已提交到服务端时才需要通知停止
+  if (run.taskId) {
+    try { await cancelTask(run.taskId); } catch (e) { /* 取消失败也不影响本地停止 */ }
+  }
 }

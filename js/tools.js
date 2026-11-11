@@ -1,6 +1,6 @@
 // ================= 工具配置：导入 / 导出 / tools 目录自动扫描 =================
-import { state, saveTools, saveActiveId } from "./store.js?v=20261109a";
-import { showStatus } from "./ui/form.js?v=20261109a";
+import { state, saveTools, saveActiveId } from "./store.js?v=20261112e";
+import { showStatus } from "./ui/form.js?v=20261112e";
 
 // 工具对象 → 配置文件 JSON（与导出/目录文件格式一致）
 function toolToConfigJSON(t) {
@@ -56,6 +56,20 @@ export function importToolFile(file, renderAll) {
     }
   };
   reader.readAsText(file);
+}
+
+// 重置工具缓存：只清浏览器 localStorage 缓存，不删除任何配置文件
+// 随后优先按已授权的配置目录重读，未授权则回退到服务器 tools/ 目录扫描
+export async function resetToolsCache(renderAll) {
+  try { localStorage.removeItem("tools"); } catch (e) {}
+  state.tools = [];
+  state.toolFileNames = {};
+  if (await toolsDirGranted()) {
+    if (await loadToolsFromDir(renderAll)) return state.tools.length > 0;
+  }
+  await scanToolsDir(renderAll);
+  renderAll();
+  return state.tools.length > 0;
 }
 
 // ============ 本地服务器模式：自动加载 tools 目录下所有配置文件 ============

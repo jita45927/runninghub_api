@@ -1,8 +1,8 @@
 // ================= 工作区动态表单与图片上传交互 =================
-import { esc } from "../config.js?v=20261109a";
-import { state, activeTool, idbSet } from "../store.js?v=20261109a";
-import { openLightbox, previewUrlFor } from "./lightbox.js?v=20261109a";
-import { openMaskEditor, clearMaskCache } from "./maskeditor.js?v=20261110a";
+import { esc } from "../config.js?v=20261112e";
+import { state, activeTool, idbSet } from "../store.js?v=20261112e";
+import { openLightbox, previewUrlFor } from "./lightbox.js?v=20261112e";
+import { openMaskEditor, clearMaskCache } from "./maskeditor.js?v=20261112e";
 
 // 每个图片字段的原始图片（未烧蒙版），再次编辑蒙版时以干净底图重画，保证"清除"有效
 const fieldBaseFiles = new Map();
@@ -11,6 +11,16 @@ const fieldMaskInfo = new Map();
 // 蒙版预览图（颜色已合成），供灯箱预览复用
 const fieldPreviewUrls = new Map();
 const baseKey = idx => (activeTool() ? activeTool().id : "tool") + "_" + idx;
+
+// 参数值的存储键：nodeId + 字段名（配置改动后仍能对应上，不用下标）
+const fieldKey = f => String(f.nodeId || "") + "|" + String(f.fieldName || "");
+
+// 取某字段上次填写的值；没有记录时用传入的默认值
+function savedFieldValue(t, f, fallback) {
+  const bucket = state.fieldValuesByTool[t.id];
+  const v = bucket ? bucket[fieldKey(f)] : undefined;
+  return v === undefined ? fallback : v;
+}
 
 // ================= 状态栏 =================
 export function showStatus(text, type) {
@@ -43,15 +53,19 @@ export function renderWorkspace() {
       </div>`;
     }
     if (f.type === "textarea") {
-      return `<div class="field${span}"><label>${esc(f.label)}</label><textarea id="ff_${i}" autocomplete="off" placeholder="${f.def ? "" : "请输入"}">${esc(f.def)}</textarea></div>`;
+      const val = savedFieldValue(t, f, f.def || "");
+      return `<div class="field${span}"><label>${esc(f.label)}</label><textarea id="ff_${i}" autocomplete="off" placeholder="${f.def ? "" : "请输入"}">${esc(val)}</textarea></div>`;
     }
     if (f.type === "select") {
       const opts = (f.def || "").split(",").map(s => s.trim()).filter(Boolean);
+      const current = savedFieldValue(t, f, opts[0] || "");
+      if (current && !opts.includes(current)) opts.unshift(current);
       return `<div class="field${span}"><label>${esc(f.label)}</label>
-        <select id="ff_${i}" autocomplete="off">${opts.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join("")}</select></div>`;
+        <select id="ff_${i}" autocomplete="off">${opts.map(o => `<option value="${esc(o)}"${o === current ? " selected" : ""}>${esc(o)}</option>`).join("")}</select></div>`;
     }
     const inputType = f.type === "number" ? "number" : "text";
-    return `<div class="field${span}"><label>${esc(f.label)}</label><input type="${inputType}" id="ff_${i}" value="${esc(f.def)}" autocomplete="off" data-form-type="other" data-lpignore="true"></div>`;
+    const val = savedFieldValue(t, f, f.def || "");
+    return `<div class="field${span}"><label>${esc(f.label)}</label><input type="${inputType}" id="ff_${i}" value="${esc(val)}" autocomplete="off" data-form-type="other" data-lpignore="true"></div>`;
   }).join("") + "</div>";
 
   // 给图片字段绑定事件
@@ -77,6 +91,18 @@ export function renderWorkspace() {
       if (e.dataTransfer.files[0]) pickFile(i, e.dataTransfer.files[0]);
     };
   });
+
+  // 记录参数改动：按工具隔离保留，切换工具后恢复；
+  // 只存内存，不写 localStorage，重启/刷新程序后回到配置默认值
+  const persistField = el => {
+    if (!el || !el.id || el.id.indexOf("ff_") !== 0) return;
+    const f = t.fields[Number(el.id.slice(3))];
+    if (!f || f.type === "image") return;
+    const bucket = state.fieldValuesByTool[t.id] || (state.fieldValuesByTool[t.id] = {});
+    bucket[fieldKey(f)] = el.value;
+  };
+  form.oninput = e => persistField(e.target);
+  form.onchange = e => persistField(e.target);
 
   // 恢复当前工具自己的生成结果（各工具结果互相隔离）
   document.getElementById("resultArea").innerHTML =
