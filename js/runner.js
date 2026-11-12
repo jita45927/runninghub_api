@@ -1,9 +1,9 @@
 // ================= 任务运行流程：组装参数、提交、轮询、取消、自动下载、扣费提示 =================
-import { state, activeTool, saveToDir, saveLastDone } from "./store.js?v=20261112e";
-import { apiKey, uploadImage, createTask, queryTask, cancelTask } from "./api.js?v=20261112e";
-import { showStatus } from "./ui/form.js?v=20261112e";
-import { buildResultHtml, bindResultImageDims } from "./ui/results.js?v=20261112e";
-import { refreshToolItemStates } from "./ui/toollist.js?v=20261112e";
+import { state, activeTool, saveToDir, saveLastDone } from "./store.js";
+import { apiKey, uploadImage, createTask, queryTask, cancelTask } from "./api.js";
+import { showStatus } from "./ui/form.js";
+import { buildResultHtml, bindResultImageDims } from "./ui/results.js";
+import { refreshToolItemStates } from "./ui/toollist.js";
 
 // 轮询查询任务（v2 查询接口直接返回状态+结果）
 async function waitTask(taskId, onTick) {

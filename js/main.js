@@ -1,12 +1,12 @@
 // ================= 入口：初始化、事件绑定、模块装配 =================
-import { state, idbGet, idbSet } from "./store.js?v=20261112e";
-import { renderToolList } from "./ui/toollist.js?v=20261112e";
-import { renderWorkspace } from "./ui/form.js?v=20261112e";
-import { initLightbox } from "./ui/lightbox.js?v=20261112e";
-import { initModals, initSetupWizard, refreshKeyBtn } from "./ui/modal.js?v=20261112e";
-import { scanToolsDir, loadToolsFromDir, toolsDirGranted, resetToolsCache } from "./tools.js?v=20261112e";
-import { runActiveTool, cancelCurrentRun } from "./runner.js?v=20261112e";
-import { showStatus } from "./ui/form.js?v=20261112e";
+import { state, idbGet, idbSet } from "./store.js";
+import { renderToolList } from "./ui/toollist.js";
+import { renderWorkspace } from "./ui/form.js";
+import { initLightbox } from "./ui/lightbox.js";
+import { initModals, initSetupWizard, refreshKeyBtn } from "./ui/modal.js";
+import { scanToolsDir, loadToolsFromDir, toolsDirGranted, resetToolsCache } from "./tools.js";
+import { runActiveTool, cancelCurrentRun } from "./runner.js";
+import { showStatus } from "./ui/form.js";
 
 let batDownloadDir = "";  // appinfo.txt 第二行：真实磁盘路径（唯一真相，server/资源管理器用）
 let serverMode = false;   // 是否通过启动工具.bat（有 server）启动

@@ -1,7 +1,15 @@
 // ================= 常量与默认配置 =================
 // 注意：本应用不含任何 API Key 和用户配置。
 // API Key 只保存在浏览器 localStorage；工具配置通过「导出/导入 .json 文件」迁移。
-export const LS = { key: "rh_apikey", site: "rh_site", tools: "rh_tools_v4", active: "rh_active_v4" };
+export const LS = {
+  key: "rh_apikey",
+  site: "rh_site",
+  tools: "rh_tools_v4",
+  active: "rh_active_v4",
+  // 以下两个键供公共核心的 store.js 使用，两个应用各自定义自己的键名
+  cats: "rhtool_cats_v1",
+  lastDone: "rhtool_last_done_v1"
+};
 
 // 字段类型定义
 export const FIELD_TYPES = {

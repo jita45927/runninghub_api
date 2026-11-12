@@ -1,8 +1,19 @@
 // ================= 工作区动态表单与图片上传交互 =================
-import { esc } from "../config.js?v=20261112e";
-import { state, activeTool, idbSet } from "../store.js?v=20261112e";
-import { openLightbox, previewUrlFor } from "./lightbox.js?v=20261112e";
-import { openMaskEditor, clearMaskCache } from "./maskeditor.js?v=20261112e";
+// 【公共核心】本文件由公共核心同步而来：请修改 runninghub_api/js/ui/form.js，再运行「同步核心.ps1」。
+import { esc } from "../config.js";
+import { state, activeTool, idbSet } from "../store.js";
+import { openLightbox, previewUrlFor } from "./lightbox.js";
+import { openMaskEditor, clearMaskCache } from "./maskeditor.js";
+
+// ================= 自定义字段类型扩展点 =================
+// 公共代码只内置 image / text / textarea / select / number；
+// 其他类型（如 ComfyUI 的 model / combo）由各应用自行注册渲染与加载逻辑
+const customRenderers = new Map();
+const customLoaders = new Map();
+export function registerFieldType(type, renderer, loader) {
+  if (renderer) customRenderers.set(type, renderer);
+  if (loader) customLoaders.set(type, loader);
+}
 
 // 每个图片字段的原始图片（未烧蒙版），再次编辑蒙版时以干净底图重画，保证"清除"有效
 const fieldBaseFiles = new Map();
@@ -45,6 +56,9 @@ export function renderWorkspace() {
 
   form.innerHTML = '<div class="form-grid">' + t.fields.map((f, i) => {
     const span = (f.type === "textarea" || f.type === "image") ? " span2" : "";
+    // 应用注册的自定义类型优先
+    const custom = customRenderers.get(f.type);
+    if (custom) return custom({ t, f, i, span, value: savedFieldValue(t, f, ""), saved: fb => savedFieldValue(t, f, fb) });
     if (f.type === "image") {
       return `<div class="field${span}">
         <label>${esc(f.label)}</label>
@@ -65,7 +79,7 @@ export function renderWorkspace() {
     }
     const inputType = f.type === "number" ? "number" : "text";
     const val = savedFieldValue(t, f, f.def || "");
-    return `<div class="field${span}"><label>${esc(f.label)}</label><input type="${inputType}" id="ff_${i}" value="${esc(val)}" autocomplete="off" data-form-type="other" data-lpignore="true"></div>`;
+    return `<div class="field${span}"><label>${esc(f.label)}</label><input type="${inputType}"${f.type === "number" ? ' step="any"' : ""} id="ff_${i}" value="${esc(val)}" autocomplete="off" data-form-type="other" data-lpignore="true"></div>`;
   }).join("") + "</div>";
 
   // 给图片字段绑定事件
@@ -90,6 +104,12 @@ export function renderWorkspace() {
       e.preventDefault(); ua.classList.remove("dragover");
       if (e.dataTransfer.files[0]) pickFile(i, e.dataTransfer.files[0]);
     };
+  });
+
+  // 应用注册的自定义字段类型：渲染完成后执行其数据加载逻辑
+  t.fields.forEach((f, i) => {
+    const load = customLoaders.get(f.type);
+    if (load) load({ t, f, i });
   });
 
   // 记录参数改动：按工具隔离保留，切换工具后恢复；

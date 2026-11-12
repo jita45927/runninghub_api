@@ -1,6 +1,6 @@
 // ================= 工具配置：导入 / 导出 / tools 目录自动扫描 =================
-import { state, saveTools, saveActiveId } from "./store.js?v=20261112e";
-import { showStatus } from "./ui/form.js?v=20261112e";
+import { state, saveTools, saveActiveId } from "./store.js";
+import { showStatus } from "./ui/form.js";
 
 // 工具对象 → 配置文件 JSON（与导出/目录文件格式一致）
 function toolToConfigJSON(t) {

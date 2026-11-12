@@ -1,7 +1,8 @@
-// ================= 左侧工具列表（按分类分组，可展开/收起） =================
-import { state, saveTools, saveActiveId, saveCats } from "../store.js?v=20261112e";
-import { toolsDirGranted, deleteToolFromDir } from "../tools.js?v=20261112e";
-import { showStatus } from "./form.js?v=20261112e";
+// ================= 左侧工具列表（按分类分组，可展开/收起）【公共核心】 =================
+// 本文件由公共核心同步而来：请修改 runninghub_api/js/ui/toollist.js，再运行「同步核心.ps1」。
+import { state, saveTools, saveActiveId, saveCats } from "../store.js";
+import { toolsDirGranted, deleteToolFromDir } from "../tools.js";
+import { showStatus } from "./form.js";
 
 // 左侧列表内拖动排序：只允许在同一分类内调整先后
 let dragToolId = null;
@@ -10,7 +11,9 @@ function catOf(t) { return (t.category || "").trim() || "未分类"; }
 
 // 工具条目状态：运行中（黄）> 最近完成（绿）> 已配置/待配置
 function statusOf(t) {
-  const configured = !!t.webappId && t.fields.every(f => f.nodeId);
+  // 应用标识：RunningHub 用 webappId，ComfyUI 用 workflow；任一存在即视为已绑定应用
+  const hasApp = !!(t.webappId || t.workflow);
+  const configured = hasApp && (t.fields || []).every(f => f.nodeId);
   if (state.runningToolId === t.id && state.currentRun) return { cls: "running", text: "◐ 生成中…" };
   if (state.lastDoneToolId === t.id) return { cls: "done", text: "✓ 最近完成" };
   return configured ? { cls: "ok", text: "● 已配置" } : { cls: "", text: "○ 待配置" };

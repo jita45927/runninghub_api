@@ -1,26 +1,42 @@
-// ================= 生成结果渲染（DOM 构建防 XSS；url 仅接受 http/https） =================
-import { state } from "../store.js?v=20261112e";
+// ================= 生成结果渲染（DOM 构建防 XSS；url 仅接受 http/https/blob） =================
+// 【公共核心】本文件由公共核心同步而来：请修改 runninghub_api/js/ui/results.js，再运行「同步核心.ps1」。
+import { state } from "../store.js";
 
-// 把接口返回的 results 渲染为结果区 HTML：图片/视频显示缩略图，文本直接展示
+const VIDEO_RE = /\.(mp4|mov|webm|mkv)(\?|#|$)/i;
+const IMAGE_RE = /png|jpe?g|webp|gif|bmp/i;
+
+function safeUrl(u) {
+  return (typeof u === "string" && /^(https?:\/\/|blob:)/i.test(u)) ? u : "";
+}
+
+// 把接口返回的 results 渲染为结果区 HTML：图片/视频显示预览，文本直接展示
 export function buildResultHtml(results) {
   const grid = document.createElement("div");
   grid.className = "result-grid";
   let hasOutput = false;
   for (const it of results) {
-    const url = (typeof it.url === "string" && /^https?:\/\//i.test(it.url)) ? it.url : "";
-    if (url && (it.outputType || "").match(/png|jpe?g|webp|gif|mp4|mov/i)) {
+    const url = safeUrl(it.url);
+    const type = String(it.outputType || "");
+    const isVideo = /video/i.test(type) || VIDEO_RE.test(url);
+    if (url && (IMAGE_RE.test(type) || isVideo)) {
       hasOutput = true;
       const item = document.createElement("div");
       item.className = "result-item";
-      const img = document.createElement("img");
-      img.src = url;
-      const dim = document.createElement("div");
-      dim.className = "img-dim";
-      dim.textContent = "📐 读取中…";
       const a = document.createElement("a");
       a.href = url; a.target = "_blank"; a.rel = "noopener"; a.download = "";
       a.textContent = "下载";
-      item.append(img, dim, a);
+      if (isVideo) {
+        const v = document.createElement("video");
+        v.src = url; v.controls = true; v.preload = "metadata"; v.muted = true;
+        item.append(v, a);
+      } else {
+        const img = document.createElement("img");
+        img.src = url;
+        const dim = document.createElement("div");
+        dim.className = "img-dim";
+        dim.textContent = "📐 读取中…";
+        item.append(img, dim, a);
+      }
       grid.appendChild(item);
     } else if (it.text) {
       hasOutput = true;

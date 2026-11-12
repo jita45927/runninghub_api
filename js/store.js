@@ -1,6 +1,7 @@
-// ================= 状态与存储层 =================
+// ================= 状态与存储层（公共核心） =================
+// 本文件由公共核心同步而来：请修改 runninghub_api/js/store.js，再运行「同步核心.ps1」。
 // localStorage（带损坏兜底）+ IndexedDB（记住目录/文件句柄）+ 跨模块共享的可变状态
-import { LS, DEFAULT_TOOLS } from "./config.js?v=20261112e";
+import { LS, DEFAULT_TOOLS } from "./config.js";
 
 // 跨模块共享状态（简单可变对象，各模块直接读写）
 export const state = {
@@ -20,15 +21,16 @@ export const state = {
   collapsedCats: [],     // 左侧栏中被收起的分类名
 };
 
-// localStorage 数据损坏时回退到默认示例工具，避免页面白屏
+// localStorage 数据损坏时回退到内置默认工具，避免页面白屏
 let loadedTools = DEFAULT_TOOLS;
 try {
   const rawTools = JSON.parse(localStorage.getItem(LS.tools) || "null");
   if (Array.isArray(rawTools)) loadedTools = rawTools;
-} catch (e) { /* 存储数据损坏，使用默认示例 */ }
+} catch (e) { /* 存储数据损坏，使用默认工具 */ }
 // 修正缺失 id 的工具（配置文件可能不带 id）
 loadedTools.forEach((t, i) => { if (!t.id) t.id = "t" + Date.now() + "_" + i; });
 // 去重：同应用ID或同名的工具只保留第一个（清理历史遗留的重复项）
+// webappId 仅 RunningHub 配置有值，ComfyUI 侧为 undefined，此时按名称去重
 state.tools = loadedTools.filter((t, i) =>
   loadedTools.findIndex(x => (t.webappId && x.webappId === t.webappId) || (t.name && x.name === t.name)) === i);
 
@@ -41,15 +43,15 @@ export function saveActiveId() { localStorage.setItem(LS.active, state.activeId 
 export function activeTool() { return state.tools.find(t => t.id === state.activeId); }
 
 // 分类收起状态持久化
-try { state.collapsedCats = JSON.parse(localStorage.getItem("rhtool_cats_v1") || "[]"); }
+try { state.collapsedCats = JSON.parse(localStorage.getItem(LS.cats) || "[]"); }
 catch (e) { state.collapsedCats = []; }
-export function saveCats() { localStorage.setItem("rhtool_cats_v1", JSON.stringify(state.collapsedCats)); }
+export function saveCats() { localStorage.setItem(LS.cats, JSON.stringify(state.collapsedCats)); }
 
-// 最近完成工具持久化（刷新页面后仍保留绿色高亮）
-try { state.lastDoneToolId = localStorage.getItem("rhtool_last_done_v1") || null; } catch (e) {}
+// 最近完成工具持久化（刷新页面后仍保留高亮）
+try { state.lastDoneToolId = localStorage.getItem(LS.lastDone) || null; } catch (e) {}
 if (!state.tools.some(t => t.id === state.lastDoneToolId)) state.lastDoneToolId = null;
 export function saveLastDone() {
-  try { localStorage.setItem("rhtool_last_done_v1", state.lastDoneToolId || ""); } catch (e) {}
+  try { localStorage.setItem(LS.lastDone, state.lastDoneToolId || ""); } catch (e) {}
 }
 
 // ================= 极简 IndexedDB 封装，用于记住用户选择的目录/文件位置 =================
