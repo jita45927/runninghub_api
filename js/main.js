@@ -3,7 +3,8 @@ import { state, idbGet, idbSet } from "./store.js";
 import { renderToolList } from "./ui/toollist.js";
 import { renderWorkspace } from "./ui/form.js";
 import { initLightbox } from "./ui/lightbox.js";
-import { initModals, initSetupWizard, refreshKeyBtn } from "./ui/modal.js";
+import { initModals, initSetupWizard } from "./ui/modal.js";
+import { appPanel, refreshKeyBtn } from "./ui/panels.js";
 import { scanToolsDir, loadToolsFromDir, toolsDirGranted, resetToolsCache } from "./tools.js";
 import { runActiveTool, cancelCurrentRun } from "./runner.js";
 import { showStatus } from "./ui/form.js";
@@ -234,7 +235,7 @@ document.getElementById("cancelBtn").onclick = cancelCurrentRun;
 })();
 
 initLightbox();
-initModals(renderAll);
+initModals(renderAll, appPanel);
 initSetupWizard({ grantToolsDir, grantDownloadDir });
 initDirButton();
 initOpenDirButton();

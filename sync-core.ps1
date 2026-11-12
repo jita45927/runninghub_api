@@ -11,7 +11,8 @@ $shared = @(
   'js\ui\toollist.js',
   'js\ui\results.js',
   'js\ui\lightbox.js',
-  'js\ui\maskeditor.js'
+  'js\ui\maskeditor.js',
+  'js\ui\modal.js'
 )
 
 if (-not (Test-Path $dst)) {

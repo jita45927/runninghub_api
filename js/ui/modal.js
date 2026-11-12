@@ -1,13 +1,15 @@
-// ================= API Key 弹窗与工具配置弹窗（含输入项编辑器、导入导出入口） =================
-import { LS, FIELD_TYPES, ICON_OPTIONS, esc } from "../config.js";
+// ================= 通用弹窗与工具配置核心 =================
+// 【公共核心】本文件由公共核心同步而来：请修改 runninghub_api/js/ui/modal.js，再运行「同步核心.ps1」。
+// 应用专属设置与配置面板通过 initModals 的 panel 参数接入（见各应用 js/ui/panels.js）。
+import { FIELD_TYPES, ICON_OPTIONS, esc } from "../config.js";
 import { state, saveTools, saveActiveId } from "../store.js";
-import { getAccountStatus } from "../api.js";
 import { importToolFile, toolsDirGranted, writeToolToDir, deleteToolFromDir } from "../tools.js";
 import { showStatus } from "./form.js";
 
 let editingToolId = null;
 let editingFields = [];  // 配置弹窗中正在编辑的字段数组
 let bigEditTarget = null;  // 大窗编辑时对应的输入框
+let appPanel = {};       // 各应用专属设置与工具配置面板
 
 // 打开大文本编辑窗（默认值 / 输入项名称 / 功能描述 共用）
 function openBigEditor(targetEl, title, subText, height) {
@@ -19,32 +21,6 @@ function openBigEditor(targetEl, title, subText, height) {
   ta.style.height = (height || 320) + "px";
   document.getElementById("bigDefModal").classList.add("show");
   ta.focus();
-}
-
-// ================= API Key 弹窗 =================
-export function refreshKeyBtn() {
-  const has = !!localStorage.getItem(LS.key);
-  document.getElementById("keyDot").className = "key-dot" + (has ? " ok" : "");
-  document.getElementById("keyBtnText").textContent = has ? "API Key 已设置" : "API Key 未设置";
-}
-
-// 查询账户余额并渲染到弹窗内
-async function fetchBalance() {
-  const box = document.getElementById("balanceInfo");
-  const k = document.getElementById("apiKey").value.trim();
-  if (!k) { box.style.display = "none"; return; }
-  box.style.display = "";
-  box.innerHTML = "💰 正在查询账户余额…";
-  try {
-    const d = await getAccountStatus(k);
-    const typeMap = { NORMAL: "消费级-会员", SHARED: "企业级-共享", EXCLUSIVE: "企业级-独占" };
-    box.innerHTML = "💰 <b>钱包余额：" + esc(d.remainMoney ?? "-") + " " + esc(d.currency || "") + "</b>" +
-      "　🪙 RH币：" + esc(d.remainCoins ?? "-") +
-      "　⏱ 运行中任务：" + esc(d.currentTaskCounts ?? "0") +
-      "　🏷 类型：" + esc(typeMap[d.apiType] || d.apiType || "-");
-  } catch (e) {
-    box.innerHTML = "💰 余额查询失败：" + esc(e.message);
-  }
 }
 
 // ================= 工具配置弹窗（含字段编辑器） =================
@@ -93,11 +69,8 @@ export function openToolModal(toolId) {
   document.getElementById("tName").value = t ? t.name : "";
   document.getElementById("tDesc").value = t ? t.desc : "";
   document.getElementById("tCategory").value = t ? (t.category || "") : "";
-  document.getElementById("tWebappId").value = t ? t.webappId : "";
-  document.getElementById("tToolType").value = t ? (t.toolType || "app") : "app";
-  document.getElementById("tToolType").dispatchEvent(new Event("change"));
-  document.getElementById("tInstanceType").value = t ? (t.instanceType || "default") : "default";
   editingFields = t && t.fields ? JSON.parse(JSON.stringify(t.fields)) : [];
+  if (appPanel.openTool) appPanel.openTool(t);  // 应用 ID / 工作流等专属内容
   renderFieldsEditor();
   document.getElementById("deleteToolBtn").style.display = t ? "" : "none";
   document.getElementById("toolModal").classList.add("show");
@@ -171,40 +144,16 @@ export function initSetupWizard({ grantToolsDir, grantDownloadDir }) {
   };
 }
 
-// 绑定两个弹窗的全部事件（renderAll 由入口传入，保存/删除/导入后整体重绘）
-export function initModals(renderAll) {
-  const keyModal = document.getElementById("keyModal");
+// 绑定弹窗事件；panel 实现各应用自己的设置与工具配置面板
+export function initModals(renderAll, panel) {
+  appPanel = panel || {};
   const toolModal = document.getElementById("toolModal");
-
-  document.getElementById("keyBtn").onclick = () => {
-    document.getElementById("apiKey").value = localStorage.getItem(LS.key) || "";
-    document.getElementById("site").value = localStorage.getItem(LS.site) || "https://www.runninghub.cn";
-    keyModal.classList.add("show");
-    fetchBalance();
-  };
-  document.getElementById("saveKeyBtn").onclick = () => {
-    const k = document.getElementById("apiKey").value.trim();
-    if (k) localStorage.setItem(LS.key, k);
-    localStorage.setItem(LS.site, document.getElementById("site").value);
-    keyModal.classList.remove("show");
-    refreshKeyBtn();
-  };
-  document.getElementById("clearKeyBtn").onclick = () => {
-    localStorage.removeItem(LS.key);
-    document.getElementById("apiKey").value = "";
-    refreshKeyBtn();
-    keyModal.classList.remove("show");
-  };
+  if (appPanel.initSettings) appPanel.initSettings();
+  if (appPanel.initToolPanel) appPanel.initToolPanel();
 
   document.getElementById("addFieldBtn").onclick = () => {
     editingFields.push({ label: "", type: "textarea", nodeId: "", fieldName: "", def: "" });
     renderFieldsEditor();
-  };
-  // 类型切换时更新 ID 字段的说明文字
-  document.getElementById("tToolType").onchange = e => {
-    document.getElementById("tWebappIdLabel").textContent = e.target.value === "workflow"
-      ? "工作流 ID（workflowId，工作流页面「API调用」中可见）"
-      : "AI 应用 ID（webappId，应用详情页 URL 或「API调用」中可见）";
   };
   // 点击功能描述 → 弹出大窗口编辑
   document.getElementById("tDesc").onclick = e => {
@@ -241,6 +190,10 @@ export function initModals(renderAll) {
   document.getElementById("saveToolBtn").onclick = async () => {
     // 触发未失焦输入框的 onchange，确保数据已收集
     document.querySelectorAll("#fieldsEditor [data-k]").forEach(inp => inp.dispatchEvent(new Event("change")));
+    if (appPanel.validateTool) {
+      const message = appPanel.validateTool();
+      if (message) { alert(message); return; }
+    }
     const bad = editingFields.find(f => !f.label || !f.nodeId || !f.fieldName);
     if (bad) { alert("有输入项的「显示名称 / 节点ID / 字段名」没填完整，请检查"); return; }
     const data = {
@@ -248,11 +201,9 @@ export function initModals(renderAll) {
       name: document.getElementById("tName").value.trim() || "未命名工具",
       desc: document.getElementById("tDesc").value.trim(),
       category: document.getElementById("tCategory").value.trim(),
-      webappId: document.getElementById("tWebappId").value.trim(),
-      toolType: document.getElementById("tToolType").value,
-      instanceType: document.getElementById("tInstanceType").value,
       fields: editingFields
     };
+    Object.assign(data, appPanel.toolData ? appPanel.toolData() : {});
     if (editingToolId) {
       Object.assign(state.tools.find(x => x.id === editingToolId), data);
     } else {
@@ -268,14 +219,17 @@ export function initModals(renderAll) {
     if (await toolsDirGranted()) {
       try {
         const fn = await writeToolToDir(state.tools.find(x => x.id === (editingToolId || data.id)));
-        showStatus("已保存到 tools/" + fn, "ok");
+        showStatus("已保存到 tools/" + fn, "success");
       } catch (err) { showStatus("写入配置目录失败：" + err.message, "error"); }
     }
   };
   document.getElementById("deleteToolBtn").onclick = async () => {
     if (!editingToolId) return;
     const inDir = await toolsDirGranted();
-    if (!confirm("确定删除这个工具吗？" + (inDir ? "\n将同时删除 tools 目录中的配置文件。" : ""))) return;
+    const msg = inDir
+      ? "确定删除这个工具吗？\n将同时删除 tools 目录中的配置文件。"
+      : "确定删除这个工具吗？\n当前未授权配置目录；如果 tools/ 目录里有同名配置文件，刷新后可能重新出现。";
+    if (!confirm(msg)) return;
     const delId = editingToolId;
     state.tools = state.tools.filter(x => x.id !== delId);
     if (state.activeId === delId) state.activeId = state.tools[0] && state.tools[0].id;
@@ -284,7 +238,7 @@ export function initModals(renderAll) {
     toolModal.classList.remove("show");
     renderAll();
     if (inDir) {
-      try { await deleteToolFromDir(delId); showStatus("已删除 tools 目录中的配置文件", "ok"); }
+      try { await deleteToolFromDir(delId); showStatus("已删除 tools 目录中的配置文件", "success"); }
       catch (err) { showStatus("删除配置文件失败：" + err.message, "error"); }
     }
   };
