@@ -24,6 +24,7 @@
 <div class="topbar">
   <div class="logo"><div class="logo-badge">🎨</div>RunningHub AI 工具箱</div>
   <div style="display:flex;gap:10px">
+    <button class="key-btn" id="homeBtn">🏠 工具首页</button>
     <button class="key-btn" id="setupBtn">🧭 初始设置</button>
     <button class="key-btn" id="dirBtn">📁 <span id="dirBtnText">下载目录：默认</span></button>
     <button class="key-btn ghost" id="openDirBtn" style="display:none">🔍 打开下载目录</button>
@@ -44,8 +45,19 @@
     <input type="file" id="importFileInput" accept=".json" style="display:none">
   </div>
 
+  <!-- 工具首页：按分类展示封面卡片 -->
+  <div class="home-view" id="homeView">
+    <div class="home-head">
+      <div>
+        <h2>工具首页</h2>
+        <p>按分类浏览全部工具，点击封面进入工作页</p>
+      </div>
+    </div>
+    <div id="homeGrid"></div>
+  </div>
+
   <!-- 右侧工作区 -->
-  <div class="workspace">
+  <div class="workspace" id="workspace" style="display:none">
     <div class="ws-header">
       <div class="ws-title">
         <div class="big-icon" id="wsIcon">🖼️</div>
@@ -133,6 +145,17 @@
           <option value="ultra">ultra (84G)</option>
         </select>
       </div>
+    </div>
+    <div class="field">
+      <label>封面图（工具首页展示，自动裁剪为 3:4，保存到 tools/工具名.png 或 .jpg）</label>
+      <div class="cover-edit">
+        <div class="cover-edit-preview" id="coverPreview">暂无封面</div>
+        <div class="cover-edit-side">
+          <button type="button" class="btn ghost" id="coverPickBtn">📷 选择图片</button>
+          <div class="cover-edit-hint" id="coverHint">支持 PNG / JPG，自动居中裁剪缩放为 3:4（600×800），≤8MB</div>
+        </div>
+      </div>
+      <input type="file" id="coverFileInput" accept="image/png,image/jpeg" style="display:none">
     </div>
     <div class="field">
       <label>功能描述</label>

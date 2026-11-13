@@ -2,6 +2,7 @@
 import { state, idbGet, idbSet } from "./store.js";
 import { renderToolList } from "./ui/toollist.js";
 import { renderWorkspace } from "./ui/form.js";
+import { renderHome, showHomeView, showWorkView } from "./ui/home.js";
 import { initLightbox } from "./ui/lightbox.js";
 import { initModals, initSetupWizard } from "./ui/modal.js";
 import { appPanel, refreshKeyBtn } from "./ui/panels.js";
@@ -12,7 +13,7 @@ import { showStatus } from "./ui/form.js";
 let batDownloadDir = "";  // appinfo.txt 第二行：真实磁盘路径（唯一真相，server/资源管理器用）
 let serverMode = false;   // 是否通过启动工具.bat（有 server）启动
 
-function renderAll() { renderToolList(renderAll); renderWorkspace(); }
+function renderAll() { renderToolList(renderAll); renderWorkspace(); renderHome(renderAll); }
 
 // ================= 工具函数：从 appinfo.txt 解析两行路径 =================
 async function fetchAppinfo() {
@@ -214,6 +215,14 @@ document.getElementById("resetToolsBtn").onclick = async () => {
 document.getElementById("runBtn").onclick = runActiveTool;
 document.getElementById("cancelBtn").onclick = cancelCurrentRun;
 
+// 首页入口；点击左侧工具条目后自动进入工作页（分类头的展开/收起不触发）
+document.getElementById("homeBtn").onclick = () => showHomeView();
+document.getElementById("toolList").addEventListener("click", e => {
+  if (e.target.closest(".tool-item")) showWorkView();
+});
+// 首页卡片上传封面时若未授权配置目录，由首页触发授权流程
+document.addEventListener("rh:grant-tools-dir", () => { grantToolsDir(); });
+
 (function initRepoCopy() {
   const btn = document.getElementById("repoCopyBtn");
   const REPO_URL = "https://github.com/jita45927/runninghub_api";
@@ -242,3 +251,4 @@ initOpenDirButton();
 initToolsDirButton();
 refreshKeyBtn();
 renderAll();
+showHomeView();  // 启动默认进入工具首页

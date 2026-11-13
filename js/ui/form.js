@@ -41,6 +41,19 @@ export function showStatus(text, type) {
 }
 
 // ================= 工作区：按字段配置动态生成表单 =================
+// 配置里的下拉选项更新后，就地刷新表单中的 select（保留已选值）
+export function refreshSelectOptions(tool) {
+  (tool.fields || []).forEach((f, i) => {
+    if (f.type !== "select") return;
+    const el = document.getElementById("ff_" + i);
+    if (!el) return;
+    const opts = (f.def || "").split(",").map(s => s.trim()).filter(Boolean);
+    const cur = el.value;
+    el.innerHTML = opts.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join("");
+    if (opts.includes(cur)) el.value = cur;
+  });
+}
+
 export function renderWorkspace() {
   const t = activeTool();
   document.getElementById("wsIcon").textContent = t ? (t.icon || "🧩") : "🖼️";

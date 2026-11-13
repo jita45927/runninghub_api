@@ -1,9 +1,10 @@
 // ================= 任务运行流程：组装参数、提交、轮询、取消、自动下载、扣费提示 =================
-import { state, activeTool, saveToDir, saveLastDone } from "./store.js";
-import { apiKey, uploadImage, createTask, queryTask, cancelTask } from "./api.js";
-import { showStatus } from "./ui/form.js";
+import { state, activeTool, saveToDir, saveLastDone, saveTools } from "./store.js";
+import { apiKey, uploadImage, createTask, queryTask, cancelTask, enrichSelectOptions } from "./api.js";
+import { showStatus, refreshSelectOptions } from "./ui/form.js";
 import { buildResultHtml, bindResultImageDims } from "./ui/results.js";
 import { refreshToolItemStates } from "./ui/toollist.js";
+import { toolsDirGranted, writeToolToDir } from "./tools.js";
 
 // 轮询查询任务（v2 查询接口直接返回状态+结果）
 async function waitTask(taskId, onTick) {
@@ -121,6 +122,20 @@ export async function runActiveTool() {
         downloaded++;
       } catch (e) { /* 自动下载失败时仍可点页面上的下载按钮 */ }
     }
+    // 运行成功后补全下拉选项：配置时只填一个默认值也会自动拉取完整候选列表
+    let optionTip = "";
+    try {
+      const filled = await enrichSelectOptions(tool);
+      if (filled) {
+        saveTools();
+        if (state.activeId === runToolId) refreshSelectOptions(tool);
+        try {
+          if (await toolsDirGranted()) await writeToolToDir(tool);
+        } catch (e) { /* 写目录失败时 localStorage 已更新 */ }
+        optionTip = "；已自动补全 " + filled + " 个下拉列表的选项";
+      }
+    } catch (e) { /* 工作流接口可能不支持拉取，失败不影响本次结果 */ }
+
     // 组装扣费信息
     let costText = "✅ 生成完成！共 " + results.length + " 个输出";
     if (downloaded) costText += "，已自动下载 " + downloaded + " 个文件到「" + (state.dirHandle ? state.dirHandle.name : "浏览器下载目录") + "」";
@@ -131,7 +146,7 @@ export async function runActiveTool() {
       if (usage.consumeCoins && usage.consumeCoins !== "0") parts.push("消耗 " + usage.consumeCoins + " RH币");
       if (parts.length) costText += "（" + parts.join("，") + "）";
     }
-    showStatus(costText + "。链接24小时内有效，请及时下载", "success");
+    showStatus(costText + optionTip + "。链接24小时内有效，请及时下载", "success");
   } catch (err) {
     // 用户主动取消（上传/提交阶段被中断）：静默收尾，不显示成错误
     if (err.name === "AbortError" || (state.currentRun && state.currentRun.cancelled)) {

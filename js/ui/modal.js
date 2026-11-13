@@ -254,6 +254,10 @@ export function initModals(renderAll, panel) {
     }
     const bad = editingFields.find(f => !f.label || !f.nodeId || !f.fieldName);
     if (bad) { alert("有输入项的「显示名称 / 节点ID / 字段名」没填完整，请检查"); return; }
+    // 记录旧名称：改名后应用专属逻辑（如封面文件）需要跟随重命名
+    const prevName = editingToolId
+      ? ((state.tools.find(x => x.id === editingToolId) || {}).name || "")
+      : "";
     const data = {
       icon: document.getElementById("tIcon").value.trim() || "🧩",
       name: document.getElementById("tName").value.trim() || "未命名工具",
@@ -273,6 +277,12 @@ export function initModals(renderAll, panel) {
     saveActiveId();
     toolModal.classList.remove("show");
     renderAll();
+    // 应用专属的保存后处理（可选钩子，未实现的程序会跳过）
+    const savedTool = state.tools.find(x => x.id === (editingToolId || data.id));
+    if (savedTool && appPanel.afterToolSave) {
+      try { appPanel.afterToolSave(savedTool, prevName); }
+      catch (e) { /* 钩子异常不影响工具保存 */ }
+    }
     // 已授权配置目录时，把工具 JSON 写回目录文件（改名时删除旧文件）
     if (await toolsDirGranted()) {
       try {

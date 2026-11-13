@@ -75,3 +75,67 @@ export async function getAccountStatus(key) {
   if (json.code !== 0) throw new Error(json.msg || "查询失败");
   return json.data;
 }
+
+// 获取应用/工作流的节点信息（含下拉列表候选值）
+export async function fetchNodeList(tool) {
+  const key = apiKey();
+  if (!key) throw new Error("未设置 API Key");
+  const isWf = tool.toolType === "workflow";
+  const path = isWf ? "/api/workflow/apiCallDemo" : "/api/webapp/apiCallDemo";
+  const qs = "?apiKey=" + encodeURIComponent(key)
+    + "&" + (isWf ? "workflowId" : "webappId") + "=" + encodeURIComponent(tool.webappId);
+  const resp = await fetch(base() + path + qs, {
+    headers: { "Authorization": "Bearer " + key }
+  });
+  const json = await parseRespJson(resp);
+  if (json.code !== 0 || !json.data) throw new Error(json.msg || "获取节点信息失败");
+  return json.data.nodeInfoList || [];
+}
+
+// 解析 fieldData 中的候选值，兼容 {name,index} 对象数组与嵌套数组两种格式
+export function parseListOptions(fieldData) {
+  if (!fieldData) return [];
+  let arr;
+  try { arr = typeof fieldData === "string" ? JSON.parse(fieldData) : fieldData; } catch (e) { return []; }
+  if (!Array.isArray(arr) || !arr.length) return [];
+  const out = [];
+  const add = v => {
+    const s = String(v == null ? "" : v).trim();
+    if (s && !out.includes(s)) out.push(s);
+  };
+  if (Array.isArray(arr[0])) {
+    arr[0].forEach(add);
+    return out;
+  }
+  if (arr.every(v => typeof v === "string")) {
+    arr.forEach(add);
+    return out;
+  }
+  for (const it of arr) {
+    if (!it || typeof it !== "object") continue;
+    if (it.index != null) add(it.index);
+    else if (it.name != null) add(it.name);
+    else if (it.value != null) add(it.value);
+  }
+  return out;
+}
+
+// 运行成功后补全下拉选项：只处理「配置时只填了一个默认值」的 select 字段
+export async function enrichSelectOptions(tool) {
+  const targets = (tool.fields || []).filter(f =>
+    f.type === "select" && (f.def || "").split(",").map(s => s.trim()).filter(Boolean).length <= 1
+  );
+  if (!targets.length) return 0;
+  const nodes = await fetchNodeList(tool);
+  const map = new Map(nodes.map(n => [String(n.nodeId) + "|" + n.fieldName, n]));
+  let filled = 0;
+  for (const f of targets) {
+    const node = map.get(String(f.nodeId) + "|" + f.fieldName);
+    const opts = parseListOptions(node && node.fieldData);
+    if (!opts.length) continue;
+    const cur = (f.def || "").trim();
+    f.def = (cur ? [cur, ...opts.filter(v => v !== cur)] : opts).join(",");
+    filled++;
+  }
+  return filled;
+}

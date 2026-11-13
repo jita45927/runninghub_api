@@ -120,6 +120,11 @@ export function toolFileName(t) {
   return String(t.name || "未命名工具").replace(/[\\/:*?"<>|]/g, "_") + ".rhtool.json";
 }
 
+// 配置文件基名（不含扩展名），封面图与它同名：tools/<基名>.png|jpg
+export function toolBaseName(t) {
+  return toolFileName(t).replace(/\.rhtool\.json$/i, "");
+}
+
 // 遍历配置目录句柄读取全部 *.rhtool.json（文件内容为准，替代 HTTP 目录扫描）
 export async function loadToolsFromDir(renderAll) {
   const dh = state.toolsDirHandle;

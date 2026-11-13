@@ -7,7 +7,10 @@
   "toolType": "app",
   "webappId": "2120130628074164226",
   "instanceType": "default",
-  "category": "文生图",
+  "tags": [
+    "文生图",
+    "人物创作"
+  ],
   "fields": [
     {
       "label": "提示词",
