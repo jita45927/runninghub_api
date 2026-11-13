@@ -27,8 +27,32 @@ try {
   const rawTools = JSON.parse(localStorage.getItem(LS.tools) || "null");
   if (Array.isArray(rawTools)) loadedTools = rawTools;
 } catch (e) { /* 存储数据损坏，使用默认工具 */ }
+// ================= 工具标签（决定左侧分组，一个工具可属于多个分组） =================
+// 新版统一存 tags 数组；旧版单值 category 自动迁移，避免历史配置文件失效
+export function tagsOf(t) {
+  const arr = Array.isArray(t.tags) ? t.tags : (t.category ? [t.category] : []);
+  const out = [];
+  arr.forEach(v => {
+    const s = String(v || "").trim();
+    if (s && !out.includes(s)) out.push(s);
+  });
+  return out;
+}
+
+// 把工具对象规范成 tags 数组，并清掉旧字段
+export function normalizeToolTags(t) {
+  t.tags = tagsOf(t);
+  delete t.category;
+  return t;
+}
+
 // 修正缺失 id 的工具（配置文件可能不带 id）
-loadedTools.forEach((t, i) => { if (!t.id) t.id = "t" + Date.now() + "_" + i; });
+let migratedTags = false;
+loadedTools.forEach((t, i) => {
+  if (!t.id) t.id = "t" + Date.now() + "_" + i;
+  if (!Array.isArray(t.tags) && t.category) migratedTags = true;  // 有旧分类需要写回缓存
+  normalizeToolTags(t);
+});
 // 去重：同应用ID或同名的工具只保留第一个（清理历史遗留的重复项）
 // webappId 仅 RunningHub 配置有值，ComfyUI 侧为 undefined，此时按名称去重
 state.tools = loadedTools.filter((t, i) =>
@@ -41,6 +65,9 @@ if (!state.tools.some(t => t.id === state.activeId)) state.activeId = state.tool
 export function saveTools() { localStorage.setItem(LS.tools, JSON.stringify(state.tools)); }
 export function saveActiveId() { localStorage.setItem(LS.active, state.activeId || ""); }
 export function activeTool() { return state.tools.find(t => t.id === state.activeId); }
+
+// 旧版 category 已迁移为 tags，写回缓存以免每次启动重复迁移
+if (migratedTags) saveTools();
 
 // 分类收起状态持久化
 try { state.collapsedCats = JSON.parse(localStorage.getItem(LS.cats) || "[]"); }

@@ -139,8 +139,13 @@
       <input type="text" id="tDesc" placeholder="一句话说明这个工具做什么（点击编辑）" readonly title="点击弹出大窗口编辑" style="cursor:pointer">
     </div>
     <div class="field">
-      <label>分类（可选，用于左侧分组管理，留空归入「未分类」）</label>
-      <input type="text" id="tCategory" placeholder="例如：放大 / 转绘 / 扩图">
+      <label>标签（决定左侧分组，可加多个；留空归入「未分类」）</label>
+      <div class="tag-chips" id="tTagChips"></div>
+      <div class="tag-add-row">
+        <select id="tTagSelect" title="选择已有标签"></select>
+        <input type="text" id="tTagInput" placeholder="输入新标签后回车" autocomplete="off">
+        <button class="btn ghost" id="tTagAddBtn" type="button">添加</button>
+      </div>
     </div>
     <div class="field">
       <label>类型</label>
@@ -197,7 +202,7 @@
       <table class="help-table">
         <tr><th>字段</th><th>说明</th></tr>
         <tr><td>图标 / 工具名称</td><td>只影响左侧列表的显示，随便起。</td></tr>
-        <tr><td>分类</td><td>左侧分组名，填相同文字的会自动归到一个可折叠的组里；留空则进「未分类」。</td></tr>
+        <tr><td>标签</td><td>决定左侧分组，可加多个（下拉选已有标签或输入新标签），同一个工具会出现在多个分组里；留空则进「未分类」。</td></tr>
         <tr><td>实例类型</td><td>default(24G) / plus(48G) / ultra(84G)。显存不够（报 OOM）时换更大的。</td></tr>
         <tr><td>类型</td><td>AI 应用 或 ComfyUI 工作流。<b>选错会报 webapp not exists</b>。</td></tr>
         <tr><td>ID</td><td>AI 应用填 <b>webappId</b>；工作流填 <b>workflowId</b>。</td></tr>
@@ -248,7 +253,7 @@
 
       <h4>七、保存后会发生什么</h4>
       <ul>
-        <li>工具立刻出现在左侧列表，可拖动排序、可改分类；</li>
+        <li>工具立刻出现在左侧列表，可拖动排序、可改标签；</li>
         <li>已授权「配置目录」时，会同时写入 <code>tools/工具名.rhtool.json</code>，下次启动自动读取；</li>
         <li>未授权配置目录时，配置只存在浏览器里，换电脑需用「导入配置文件」迁移。</li>
       </ul>

@@ -1,13 +1,18 @@
 // ================= 左侧工具列表（按分类分组，可展开/收起）【公共核心】 =================
 // 本文件由公共核心同步而来：请修改 runninghub_api/js/ui/toollist.js，再运行「同步核心.ps1」。
-import { state, saveTools, saveActiveId, saveCats } from "../store.js";
+import { state, saveTools, saveActiveId, saveCats, tagsOf } from "../store.js";
 import { toolsDirGranted, deleteToolFromDir } from "../tools.js";
 import { showStatus } from "./form.js";
 
-// 左侧列表内拖动排序：只允许在同一分类内调整先后
+// 左侧列表内拖动排序：只允许在同一分组内调整先后
 let dragToolId = null;
+let dragToolTag = null;  // 被拖动条目所在的分组
 
-function catOf(t) { return (t.category || "").trim() || "未分类"; }
+// 工具所属分组：一个工具可以打多个标签，因此在多组里各出现一次；没有标签归入「未分类」
+function groupsOf(t) {
+  const tags = tagsOf(t);
+  return tags.length ? tags : ["未分类"];
+}
 
 // 工具条目状态：运行中（黄）> 最近完成（绿）> 已配置/待配置
 function statusOf(t) {
@@ -24,12 +29,15 @@ let lastRenderAll = null;
 
 // 仅刷新各条目的运行/完成高亮与状态文字，不重建列表（供运行状态变化时调用）
 export function refreshToolItemStates() {
-  // 运行中的工具若在收起的分类里，先展开，保证能看到橙色脉动高亮
+  // 运行中的工具若所属分组全部收起，先展开第一个，保证能看到橙色脉动高亮
   const runTool = state.tools.find(x => x.id === state.runningToolId);
-  if (runTool && state.collapsedCats.includes(catOf(runTool))) {
-    state.collapsedCats = state.collapsedCats.filter(c => c !== catOf(runTool));
-    saveCats();
-    if (lastRenderAll) { lastRenderAll(); return; }
+  if (runTool) {
+    const groups = groupsOf(runTool);
+    if (groups.every(g => state.collapsedCats.includes(g))) {
+      state.collapsedCats = state.collapsedCats.filter(c => c !== groups[0]);
+      saveCats();
+      if (lastRenderAll) { lastRenderAll(); return; }
+    }
   }
   document.querySelectorAll(".tool-item[data-tool-id]").forEach(el => {
     const t = state.tools.find(x => x.id === el.dataset.toolId);
@@ -54,13 +62,14 @@ function moveTool(srcId, dstId, after) {
   saveTools();
 }
 
-// 单个工具条目（DOM 构建，防注入）
-function buildToolItem(t, renderAll) {
+// 单个工具条目（DOM 构建，防注入）；groupTag 是它当前所属的分组（同一工具可能在多组出现）
+function buildToolItem(t, renderAll, groupTag) {
   const st = statusOf(t);
   const el = document.createElement("div");
   el.className = "tool-item" + (t.id === state.activeId ? " active" : "")
     + (st.cls === "running" ? " running" : "") + (st.cls === "done" ? " done" : "");
   el.dataset.toolId = t.id;
+  el.dataset.groupTag = groupTag;
   const iconEl = document.createElement("div");
   iconEl.className = "tool-icon";
   iconEl.textContent = t.icon || "🧩";
@@ -106,20 +115,21 @@ function buildToolItem(t, renderAll) {
   el.draggable = true;
   el.addEventListener("dragstart", e => {
     dragToolId = t.id;
+    dragToolTag = groupTag;
     el.classList.add("dragging");
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", t.id);  // Firefox 需要设置数据才能拖动
   });
   el.addEventListener("dragend", () => {
     dragToolId = null;
+    dragToolTag = null;
     el.classList.remove("dragging");
     document.querySelectorAll(".tool-item.drop-before, .tool-item.drop-after")
       .forEach(x => x.classList.remove("drop-before", "drop-after"));
   });
   el.addEventListener("dragover", e => {
     if (!dragToolId || dragToolId === t.id) return;
-    const src = state.tools.find(x => x.id === dragToolId);
-    if (!src || catOf(src) !== catOf(t)) return;  // 跨分类不排序
+    if (dragToolTag !== groupTag) return;  // 跨分组不排序
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     const r = el.getBoundingClientRect();
@@ -145,12 +155,13 @@ export function renderToolList(renderAll) {
   const list = document.getElementById("toolList");
   list.innerHTML = "";
 
-  // 按分类分组，保持首次出现顺序；「未分类」排最后
+  // 按分组归集：一个工具的每个标签都会生成一个分组，因此可以同时出现在多个分组里
   const groups = new Map();
   state.tools.forEach(t => {
-    const cat = (t.category || "").trim() || "未分类";
-    if (!groups.has(cat)) groups.set(cat, []);
-    groups.get(cat).push(t);
+    groupsOf(t).forEach(tag => {
+      if (!groups.has(tag)) groups.set(tag, []);
+      groups.get(tag).push(t);
+    });
   });
   const catNames = [...groups.keys()].sort((a, b) =>
     a === "未分类" ? 1 : b === "未分类" ? -1 : a.localeCompare(b, "zh"));
@@ -184,6 +195,6 @@ export function renderToolList(renderAll) {
       list.appendChild(head);
     }
 
-    if (!collapsed) tools.forEach(t => list.appendChild(buildToolItem(t, renderAll)));
+    if (!collapsed) tools.forEach(t => list.appendChild(buildToolItem(t, renderAll, cat)));
   });
 }

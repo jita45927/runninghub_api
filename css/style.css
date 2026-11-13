@@ -210,6 +210,17 @@ label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px
 .form-grid .span2 { grid-column: 1 / -1; }
 @media (max-width: 900px) { .form-grid { grid-template-columns: 1fr; } }
 
+/* ===== 标签编辑器（工具配置弹窗） ===== */
+.tag-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.tag-chips:empty { display: none; }
+.tag-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; font-size: 12px; color: var(--text); }
+.tag-chip button { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 12px; line-height: 1; padding: 0; }
+.tag-chip button:hover { color: var(--red); }
+.tag-add-row { display: flex; gap: 8px; align-items: center; }
+.tag-add-row select { flex: 0 0 170px; width: 170px; }
+.tag-add-row input[type=text] { flex: 1; }
+.tag-add-row .btn { flex: 0 0 auto; }
+
 .status-bar { margin-top: 14px; padding: 12px 14px; border-radius: 8px; background: var(--bg); font-size: 13px; color: var(--muted); display: none; }
 .status-bar.show { display: block; }
 .status-bar.error { color: var(--red); }

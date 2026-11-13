@@ -2,12 +2,13 @@
 // 【公共核心】本文件由公共核心同步而来：请修改 runninghub_api/js/ui/modal.js，再运行「同步核心.ps1」。
 // 应用专属设置与配置面板通过 initModals 的 panel 参数接入（见各应用 js/ui/panels.js）。
 import { FIELD_TYPES, ICON_OPTIONS, esc } from "../config.js";
-import { state, saveTools, saveActiveId } from "../store.js";
+import { state, saveTools, saveActiveId, tagsOf } from "../store.js";
 import { importToolFile, toolsDirGranted, writeToolToDir, deleteToolFromDir } from "../tools.js";
 import { showStatus } from "./form.js";
 
 let editingToolId = null;
 let editingFields = [];  // 配置弹窗中正在编辑的字段数组
+let editingTags = [];    // 配置弹窗中正在编辑的标签（决定左侧分组，可多个）
 let bigEditTarget = null;  // 大窗编辑时对应的输入框
 let appPanel = {};       // 各应用专属设置与工具配置面板
 
@@ -21,6 +22,51 @@ function openBigEditor(targetEl, title, subText, height) {
   ta.style.height = (height || 320) + "px";
   document.getElementById("bigDefModal").classList.add("show");
   ta.focus();
+}
+
+// ================= 标签编辑器 =================
+// 已有标签下拉选择，新标签手动输入；一个工具可打多个标签，即在多个分组里出现
+function allKnownTags() {
+  const set = new Set();
+  state.tools.forEach(t => tagsOf(t).forEach(tag => set.add(tag)));
+  return [...set].sort((a, b) => a.localeCompare(b, "zh"));
+}
+
+function renderTagEditor() {
+  const chips = document.getElementById("tTagChips");
+  const sel = document.getElementById("tTagSelect");
+  if (!chips || !sel) return;
+  chips.innerHTML = "";
+  editingTags.forEach(tag => {
+    const chip = document.createElement("span");
+    chip.className = "tag-chip";
+    const text = document.createElement("span");
+    text.textContent = tag;
+    const del = document.createElement("button");
+    del.type = "button";
+    del.textContent = "✕";
+    del.title = "移除标签";
+    del.onclick = () => {
+      editingTags = editingTags.filter(x => x !== tag);
+      renderTagEditor();
+    };
+    chip.append(text, del);
+    chips.appendChild(chip);
+  });
+  const rest = allKnownTags().filter(x => !editingTags.includes(x));
+  sel.innerHTML = '<option value="">' + (rest.length ? "＋ 选择已有标签…" : "暂无其他已有标签") + "</option>" +
+    rest.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join("");
+  sel.value = "";
+  sel.disabled = rest.length === 0;
+}
+
+function addTagFromInput() {
+  const input = document.getElementById("tTagInput");
+  const v = input.value.trim();
+  input.value = "";
+  if (!v) return;
+  if (!editingTags.includes(v)) editingTags.push(v);
+  renderTagEditor();
 }
 
 // ================= 工具配置弹窗（含字段编辑器） =================
@@ -68,7 +114,9 @@ export function openToolModal(toolId) {
   iconSel.innerHTML = opts.map(o => `<option value="${esc(o)}"${o === curIcon ? " selected" : ""}>${esc(o)}</option>`).join("");
   document.getElementById("tName").value = t ? t.name : "";
   document.getElementById("tDesc").value = t ? t.desc : "";
-  document.getElementById("tCategory").value = t ? (t.category || "") : "";
+  editingTags = t ? tagsOf(t) : [];
+  renderTagEditor();
+  document.getElementById("tTagInput").value = "";
   editingFields = t && t.fields ? JSON.parse(JSON.stringify(t.fields)) : [];
   if (appPanel.openTool) appPanel.openTool(t);  // 应用 ID / 工作流等专属内容
   renderFieldsEditor();
@@ -155,6 +203,16 @@ export function initModals(renderAll, panel) {
     editingFields.push({ label: "", type: "textarea", nodeId: "", fieldName: "", def: "" });
     renderFieldsEditor();
   };
+  // 标签：下拉选已有标签，输入框回车或点「添加」新建
+  document.getElementById("tTagAddBtn").onclick = addTagFromInput;
+  document.getElementById("tTagInput").onkeydown = e => {
+    if (e.key === "Enter") { e.preventDefault(); addTagFromInput(); }
+  };
+  document.getElementById("tTagSelect").onchange = e => {
+    const v = e.target.value;
+    if (v && !editingTags.includes(v)) editingTags.push(v);
+    renderTagEditor();
+  };
   // 点击功能描述 → 弹出大窗口编辑
   document.getElementById("tDesc").onclick = e => {
     openBigEditor(e.target, "编辑功能描述", "一句话说明这个工具做什么", 140);
@@ -200,7 +258,7 @@ export function initModals(renderAll, panel) {
       icon: document.getElementById("tIcon").value.trim() || "🧩",
       name: document.getElementById("tName").value.trim() || "未命名工具",
       desc: document.getElementById("tDesc").value.trim(),
-      category: document.getElementById("tCategory").value.trim(),
+      tags: editingTags.slice(),
       fields: editingFields
     };
     Object.assign(data, appPanel.toolData ? appPanel.toolData() : {});

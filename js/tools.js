@@ -1,5 +1,5 @@
 // ================= 工具配置：导入 / 导出 / tools 目录自动扫描 =================
-import { state, saveTools, saveActiveId } from "./store.js";
+import { state, saveTools, saveActiveId, tagsOf } from "./store.js";
 import { showStatus } from "./ui/form.js";
 
 // 工具对象 → 配置文件 JSON（与导出/目录文件格式一致）
@@ -8,7 +8,7 @@ function toolToConfigJSON(t) {
     type: "runninghub-tool-config",
     version: 1,
     name: t.name, icon: t.icon, desc: t.desc, toolType: t.toolType || "app",
-    webappId: t.webappId, instanceType: t.instanceType, category: t.category || "", fields: t.fields
+    webappId: t.webappId, instanceType: t.instanceType, tags: tagsOf(t), fields: t.fields
   }, null, 2);
 }
 
@@ -24,7 +24,7 @@ export function importToolFile(file, renderAll) {
         icon: data.icon || "🧩",
         name: data.name || file.name.replace(/\.rhtool\.json$/i, "").replace(/\.json$/i, ""),
         desc: data.desc || "",
-        category: data.category || "",
+        tags: tagsOf(data),
         webappId: data.webappId || "",
         toolType: data.toolType || "app",
         instanceType: data.instanceType || "default",
@@ -92,6 +92,8 @@ export async function scanToolsDir(renderAll) {
         continue;
       }
       if (!t.id) t.id = "t" + Date.now() + "_" + n++;  // 配置文件没有 id 时自动补一个
+      t.tags = tagsOf(t);
+      delete t.category;  // 旧版单值分类统一迁移为标签数组
       // 同应用ID或同名视为同一工具：以文件内容为准更新（保证 tools 目录是权威配置）
       const idx = state.tools.findIndex(x => (t.webappId && x.webappId === t.webappId) || (t.name && x.name === t.name));
       if (idx >= 0) { state.tools[idx] = { ...t, id: state.tools[idx].id }; }
@@ -136,6 +138,8 @@ export async function loadToolsFromDir(renderAll) {
         continue;
       }
       // 同应用ID或同名视为同一工具：以文件内容为准更新，并记住 id → 文件名映射
+      t.tags = tagsOf(t);
+      delete t.category;  // 旧版单值分类统一迁移为标签数组
       const idx = state.tools.findIndex(x => (t.webappId && x.webappId === t.webappId) || (t.name && x.name === t.name));
       if (idx >= 0) { t.id = state.tools[idx].id; state.tools[idx] = t; }
       else { t.id = "t" + Date.now() + "_" + n++; state.tools.push(t); }
