@@ -126,9 +126,10 @@ function buildCard(t) {
 
   card.append(buildCover(t), body);
   card.onclick = () => {
-    // 与左侧列表切换一致：先保存当前工具的结果，再恢复目标工具的界面
-    if (state.activeId && state.activeId !== t.id) {
-      state.toolResults[state.activeId] = document.getElementById("resultArea").innerHTML;
+    // 与左侧列表切换一致：先保存当前工具的结果，再恢复目标工具的界面（占位提示不写入历史）
+    const area = document.getElementById("resultArea");
+    if (state.activeId && state.activeId !== t.id && !area.querySelector(".result-placeholder")) {
+      state.toolResults[state.activeId] = area.innerHTML;
     }
     state.activeId = t.id;
     saveActiveId();

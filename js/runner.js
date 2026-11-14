@@ -6,6 +6,61 @@ import { buildResultHtml, bindResultImageDims } from "./ui/results.js";
 import { refreshToolItemStates } from "./ui/toollist.js";
 import { toolsDirGranted, writeToolToDir } from "./tools.js";
 
+const RESULTS_STORE_KEY = "rh_results_session";
+let agentSession = "";
+
+// 结果随页面刷新保留，但程序（启动工具.bat）重启后清空：
+// server 每次启动都会给一个新的 session，旧 session 的结果直接丢弃
+export function restoreResultsSession(session) {
+  agentSession = session || "";
+  if (!agentSession) return false;
+  try {
+    const raw = JSON.parse(localStorage.getItem(RESULTS_STORE_KEY) || "null");
+    if (raw && raw.session === agentSession) {
+      if (raw.results) state.toolResults = raw.results;
+      if (raw.fields) state.fieldValuesByTool = raw.fields;
+      return true;
+    }
+    localStorage.removeItem(RESULTS_STORE_KEY);
+  } catch (e) {
+    localStorage.removeItem(RESULTS_STORE_KEY);
+  }
+  return false;
+}
+
+export function saveResultsSession() {
+  if (!agentSession) return;
+  try {
+    localStorage.setItem(RESULTS_STORE_KEY, JSON.stringify({
+      session: agentSession,
+      results: state.toolResults,
+      fields: state.fieldValuesByTool
+    }));
+  } catch (e) { /* 空间不足时忽略，内存里的结果仍可用 */ }
+}
+
+window.addEventListener("pagehide", saveResultsSession);
+
+// 结果按工具累计：新批次放最前，再次生成、切换工具都不清空，刷新页面仍保留，重启程序才重置
+function appendResultBatch(toolId, resultHtml) {
+  const hasHistory = !!state.toolResults[toolId];
+  const stamp = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+  const batchHtml = hasHistory
+    ? '<div class="result-batch"><div class="result-batch-head">生成于 ' + stamp + '</div>' + resultHtml + '</div>'
+    : resultHtml;
+  state.toolResults[toolId] = batchHtml + (state.toolResults[toolId] || "");
+  if (state.activeId === toolId) document.getElementById("resultArea").innerHTML = state.toolResults[toolId];
+  saveResultsSession();
+}
+
+// 失败/取消提示：已有历史结果时保留历史，只在空结果区显示提示
+function showResultNotice(toolId, html) {
+  if (state.toolResults[toolId]) return;
+  state.toolResults[toolId] = html;
+  if (state.activeId === toolId) document.getElementById("resultArea").innerHTML = html;
+  saveResultsSession();
+}
+
 // 轮询查询任务（v2 查询接口直接返回状态+结果）
 async function waitTask(taskId, onTick) {
   for (let i = 0; i < 200; i++) {
@@ -38,7 +93,7 @@ export async function runActiveTool() {
   const cancelBtn = document.getElementById("cancelBtn");
   cancelBtn.style.display = ""; cancelBtn.disabled = false;
   refreshToolItemStates();  // 左侧列表立即显示"生成中"高亮
-  document.getElementById("resultArea").innerHTML = '<div class="result-placeholder">生成中…</div>';
+  // 不在开始时清空结果区：保留历史结果，进度由状态栏提示
   // 检查是否已被取消（各阶段之间调用，避免取消后继续提交）
   const throwIfCancelled = () => {
     if (state.currentRun && state.currentRun.cancelled) throw new DOMException("已取消", "AbortError");
@@ -84,15 +139,12 @@ export async function runActiveTool() {
 
     if (cancelled) {
       showStatus("⏹ 已取消，任务已停止", "");
-      state.toolResults[runToolId] = '<div class="result-placeholder">已取消</div>';
-      if (state.activeId === runToolId) document.getElementById("resultArea").innerHTML = state.toolResults[runToolId];
+      showResultNotice(runToolId, '<div class="result-placeholder">已取消</div>');
       return;
     }
 
-    // 结果写入所属工具的存储；若用户还停留在该工具界面则直接更新显示
-    const resultHtml = buildResultHtml(results);
-    state.toolResults[runToolId] = resultHtml;
-    if (state.activeId === runToolId) document.getElementById("resultArea").innerHTML = resultHtml;
+    // 结果追加到该工具的历史记录；若用户还停留在该工具界面则直接更新显示
+    appendResultBatch(runToolId, buildResultHtml(results));
     // 标记最近完成工具（左侧列表绿色高亮，刷新后保留）
     state.lastDoneToolId = runToolId;
     saveLastDone();
@@ -151,13 +203,11 @@ export async function runActiveTool() {
     // 用户主动取消（上传/提交阶段被中断）：静默收尾，不显示成错误
     if (err.name === "AbortError" || (state.currentRun && state.currentRun.cancelled)) {
       showStatus("⏹ 已取消", "");
-      state.toolResults[runToolId] = '<div class="result-placeholder">已取消</div>';
-      if (state.activeId === runToolId) document.getElementById("resultArea").innerHTML = state.toolResults[runToolId];
+      showResultNotice(runToolId, '<div class="result-placeholder">已取消</div>');
       return;
     }
     showStatus("❌ " + err.message, "error");
-    state.toolResults[runToolId] = '<div class="result-placeholder">生成失败</div>';
-    if (state.activeId === runToolId) document.getElementById("resultArea").innerHTML = state.toolResults[runToolId];
+    showResultNotice(runToolId, '<div class="result-placeholder">生成失败</div>');
   } finally {
     runBtn.disabled = false;
     document.getElementById("cancelBtn").style.display = "none";

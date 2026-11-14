@@ -1,14 +1,15 @@
 # 本地开发服务器：禁止一切缓存，保证浏览器永远拿到最新代码
 # 扩展路由：
-#   /appinfo            → 返回 {tools, download} 目录绝对路径
+#   /appinfo            → 返回 {tools, download, session}，session 每次启动都不同
 #   /open-dir?path=...  → 调起 Windows 资源管理器打开指定目录
 #   /pick-download-dir  → 弹系统 FolderBrowserDialog 让用户选下载目录，写回 appinfo.txt 第二行
-import http.server, os, sys, json, locale, subprocess, shlex
+import http.server, os, sys, json, locale, subprocess, shlex, uuid
 from urllib.parse import urlparse, parse_qs, unquote
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 APPINFO = "appinfo.txt"
+SESSION_ID = uuid.uuid4().hex  # 每次启动 server 生成新会话号，用于清空上一次的生成结果
 
 def _read_appinfo_lines():
     """读取 appinfo.txt，返回有效行列表。自动检测 UTF-8 / UTF-8-SIG / GBK。"""
@@ -93,6 +94,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def _handle_appinfo(self):
         info = _load_appinfo()
+        info["session"] = SESSION_ID
         body = json.dumps(info, ensure_ascii=False).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -167,7 +169,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 # 默认 8900，避免与同机的 COMFYUI_api 程序（8899）冲突
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8900
 
+class AppServer(http.server.ThreadingHTTPServer):
+    # Windows 下默认允许重复占用同一端口，会出现新旧两个后台同时"监听"、
+    # 刷新后时而旧版时而新版；这里禁止重复占用，配合启动脚本先清理旧进程
+    allow_reuse_address = False
+
 try:
-    http.server.ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    AppServer(("127.0.0.1", PORT), Handler).serve_forever()
 except KeyboardInterrupt:
     sys.exit(0)

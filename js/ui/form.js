@@ -57,7 +57,10 @@ export function refreshSelectOptions(tool) {
 export function renderWorkspace() {
   const t = activeTool();
   document.getElementById("wsIcon").textContent = t ? (t.icon || "🧩") : "🖼️";
-  document.getElementById("wsName").textContent = t ? t.name : "请选择工具";
+  const sourceUrl = t && /^https?:\/\//i.test(t.sourceUrl || "") ? t.sourceUrl : "";
+  document.getElementById("wsName").innerHTML = sourceUrl
+    ? `<span>${esc(t.name)}</span><a class="source-link" href="${esc(sourceUrl)}" target="_blank" rel="noopener noreferrer">原始地址 ↗</a>`
+    : (t ? esc(t.name) : "请选择工具");
   document.getElementById("wsDesc").textContent = t ? (t.desc || "点击右上角「配置此工具」完善参数") : "从左侧选择一个工具开始使用";
 
   state.fieldFiles = t ? (state.fieldFilesByTool[t.id] || (state.fieldFilesByTool[t.id] = {})) : {};  // 恢复当前工具已选的图片

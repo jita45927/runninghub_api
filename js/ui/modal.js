@@ -114,6 +114,8 @@ export function openToolModal(toolId) {
   iconSel.innerHTML = opts.map(o => `<option value="${esc(o)}"${o === curIcon ? " selected" : ""}>${esc(o)}</option>`).join("");
   document.getElementById("tName").value = t ? t.name : "";
   document.getElementById("tDesc").value = t ? t.desc : "";
+  const srcEl = document.getElementById("tSourceUrl");  // 部分应用未提供该输入框
+  if (srcEl) srcEl.value = t ? (t.sourceUrl || "") : "";
   editingTags = t ? tagsOf(t) : [];
   renderTagEditor();
   document.getElementById("tTagInput").value = "";
@@ -258,10 +260,17 @@ export function initModals(renderAll, panel) {
     const prevName = editingToolId
       ? ((state.tools.find(x => x.id === editingToolId) || {}).name || "")
       : "";
+    const srcEl = document.getElementById("tSourceUrl");  // 部分应用未提供该输入框
+    const sourceUrl = srcEl ? srcEl.value.trim() : "";
+    if (sourceUrl && !/^https?:\/\//i.test(sourceUrl)) {
+      alert("原始地址需要以 http:// 或 https:// 开头，可留空");
+      return;
+    }
     const data = {
       icon: document.getElementById("tIcon").value.trim() || "🧩",
       name: document.getElementById("tName").value.trim() || "未命名工具",
       desc: document.getElementById("tDesc").value.trim(),
+      sourceUrl,
       tags: editingTags.slice(),
       fields: editingFields
     };

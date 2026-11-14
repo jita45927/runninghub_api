@@ -33,6 +33,12 @@ if errorlevel 1 (
   exit /b 1
 )
 
+rem Stop old server instances on this port. Closing the black window does not
+rem always kill python.exe, which leaves an old server.py occupying the port.
+rem Only processes whose command line is "server.py %PORT%" are stopped,
+rem so COMFYUI_api on port 8899 is not affected.
+powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | Where-Object { $_.CommandLine -match 'server\.py\s+%PORT%' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>nul
+
 echo ============================================
 echo   RunningHub AI Toolbox
 echo   URL: http://127.0.0.1:%PORT%/

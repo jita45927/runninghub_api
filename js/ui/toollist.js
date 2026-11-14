@@ -106,8 +106,11 @@ function buildToolItem(t, renderAll, groupTag) {
     }
   };
   el.onclick = () => {
-    // 切换前保存当前工具的结果，切换后恢复目标工具的结果
-    if (state.activeId) state.toolResults[state.activeId] = document.getElementById("resultArea").innerHTML;
+    // 切换前保存当前工具的结果，切换后恢复目标工具的结果（占位提示不写入历史）
+    const area = document.getElementById("resultArea");
+    if (state.activeId && !area.querySelector(".result-placeholder")) {
+      state.toolResults[state.activeId] = area.innerHTML;
+    }
     state.activeId = t.id; saveActiveId(); renderAll();
   };
 

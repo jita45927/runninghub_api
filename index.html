@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RunningHub AI 工具箱</title>
+<title>RunningHub AI设计师工具箱</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -18,11 +18,12 @@
     <a href="https://github.com/jita45927/runninghub_api" target="_blank" rel="noopener">GITHUB仓库地址</a>
     <button class="repo-copy-btn" id="repoCopyBtn" title="复制仓库地址">📋 复制</button>
   </span>
+  <span class="promo-line">本工具由TRAE-IDE工具辅助生成，通过我的分享链接注册并登录桌面端，新用户一次性获得 3,000 积分！<a href="https://www.trae.cn/events/code-fission/B8F6GKVM5QPU?utm_source=copy_link&amp;utm_medium=code_fission" target="_blank" rel="noopener">【注册地址】</a></span>
 </div>
 
 <!-- 顶栏 -->
 <div class="topbar">
-  <div class="logo"><div class="logo-badge">🎨</div>RunningHub AI 工具箱</div>
+  <div class="logo"><div class="logo-badge">🎨</div>RunningHub AI设计师工具箱</div>
   <div style="display:flex;gap:10px">
     <button class="key-btn" id="homeBtn">🏠 工具首页</button>
     <button class="key-btn" id="setupBtn">🧭 初始设置</button>
@@ -160,6 +161,10 @@
     <div class="field">
       <label>功能描述</label>
       <input type="text" id="tDesc" placeholder="一句话说明这个工具做什么（点击编辑）" readonly title="点击弹出大窗口编辑" style="cursor:pointer">
+    </div>
+    <div class="field">
+      <label>原始地址（可选，工具页名称旁会显示「原始地址」链接；留空不显示）</label>
+      <input type="text" id="tSourceUrl" placeholder="粘贴 RunningHub 应用或工作流页面地址，可留空">
     </div>
     <div class="field">
       <label>标签（决定左侧分组，可加多个；留空归入「未分类」）</label>

@@ -7,7 +7,7 @@ import { initLightbox } from "./ui/lightbox.js";
 import { initModals, initSetupWizard } from "./ui/modal.js";
 import { appPanel, refreshKeyBtn } from "./ui/panels.js";
 import { scanToolsDir, loadToolsFromDir, toolsDirGranted, resetToolsCache } from "./tools.js";
-import { runActiveTool, cancelCurrentRun } from "./runner.js";
+import { runActiveTool, cancelCurrentRun, restoreResultsSession } from "./runner.js";
 import { showStatus } from "./ui/form.js";
 
 let batDownloadDir = "";  // appinfo.txt 第二行：真实磁盘路径（唯一真相，server/资源管理器用）
@@ -18,11 +18,18 @@ function renderAll() { renderToolList(renderAll); renderWorkspace(); renderHome(
 // ================= 工具函数：从 appinfo.txt 解析两行路径 =================
 async function fetchAppinfo() {
   try {
+    const r = await fetch("/appinfo");
+    if (r.ok) {
+      const j = await r.json();
+      return { tools: j.tools || "", download: j.download || "", session: j.session || "" };
+    }
+  } catch (e) { /* 非 server 模式，继续尝试静态文件 */ }
+  try {
     const r = await fetch("appinfo.txt");
     if (!r.ok) return null;
     const text = await r.text();
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    return { tools: lines[0] || "", download: lines[1] || "" };
+    return { tools: lines[0] || "", download: lines[1] || "", session: "" };
   } catch (e) { return null; }
 }
 
@@ -124,10 +131,14 @@ function initDirButton() {
   // 页面打开时检测 serverMode，读取 appinfo.txt 第二行作为初始 batDownloadDir
   (async () => {
     const info = await fetchAppinfo();
-    if (info && info.download) {
-      serverMode = true;
-      batDownloadDir = info.download;
-      document.getElementById("openDirBtn").style.display = "";
+    if (info) {
+      // 同一程序会话内刷新页面 → 结果和参数保留；重启启动工具.bat → session 变化 → 清空
+      if (info.session && restoreResultsSession(info.session)) renderAll();
+      if (info.download) {
+        serverMode = true;
+        batDownloadDir = info.download;
+        document.getElementById("openDirBtn").style.display = "";
+      }
     }
 
     if (!window.showDirectoryPicker) return;

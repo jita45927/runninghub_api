@@ -7,7 +7,7 @@ function toolToConfigJSON(t) {
   return JSON.stringify({
     type: "runninghub-tool-config",
     version: 1,
-    name: t.name, icon: t.icon, desc: t.desc, toolType: t.toolType || "app",
+    name: t.name, icon: t.icon, desc: t.desc, sourceUrl: t.sourceUrl || "", toolType: t.toolType || "app",
     webappId: t.webappId, instanceType: t.instanceType, tags: tagsOf(t), fields: t.fields
   }, null, 2);
 }
@@ -24,6 +24,7 @@ export function importToolFile(file, renderAll) {
         icon: data.icon || "🧩",
         name: data.name || file.name.replace(/\.rhtool\.json$/i, "").replace(/\.json$/i, ""),
         desc: data.desc || "",
+        sourceUrl: data.sourceUrl || "",
         tags: tagsOf(data),
         webappId: data.webappId || "",
         toolType: data.toolType || "app",

@@ -13,6 +13,7 @@ body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: va
 }
 .promo-bar a { color: #8ab4ff; font-weight: 600; text-decoration: none; white-space: nowrap; }
 .promo-bar a:hover { text-decoration: underline; }
+.promo-bar .promo-line { flex-basis: 100%; text-align: center; line-height: 1.6; }
 .promo-bar .repo-group { display: inline-flex; align-items: center; gap: 6px; }
 .promo-bar .repo-copy-btn {
   padding: 1px 8px; font-size: 11px; color: var(--muted); cursor: pointer;
@@ -114,7 +115,9 @@ body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: va
 .ws-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
 .ws-title { display: flex; align-items: center; gap: 14px; }
 .ws-title .big-icon { font-size: 30px; }
-.ws-title h2 { font-size: 20px; }
+.ws-title h2 { font-size: 20px; display: flex; align-items: center; gap: 10px; }
+.ws-title h2 .source-link { font-size: 12px; font-weight: 400; color: var(--accent); text-decoration: none; border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; white-space: nowrap; }
+.ws-title h2 .source-link:hover { border-color: var(--accent); }
 .ws-title p { font-size: 12px; color: var(--muted); margin-top: 3px; }
 
 .btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 11px 26px; font-size: 14px; cursor: pointer; font-weight: 600; }
@@ -227,6 +230,9 @@ label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px
 .status-bar.success { color: var(--green); }
 
 .result-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.result-batch { margin-bottom: 18px; }
+.result-batch:last-child { margin-bottom: 0; }
+.result-batch-head { margin: 0 0 8px; font-size: 12px; color: var(--muted); }
 .result-item { position: relative; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
 .result-item img { width: 100%; display: block; }
 .result-item a { position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,.65); color: #fff; text-decoration: none; padding: 6px 14px; border-radius: 6px; font-size: 12px; }

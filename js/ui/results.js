@@ -66,6 +66,7 @@ export function bindResultImageDims(runToolId) {
   if (state.activeId !== runToolId) return;
   document.querySelectorAll("#resultArea .result-item img").forEach(im => {
     const set = () => {
+      if (state.activeId !== runToolId) return;  // 图片加载期间已切换工具，勿覆盖其他工具的结果
       const d = im.parentElement.querySelector(".img-dim");
       if (d) d.textContent = "📐 " + im.naturalWidth + " × " + im.naturalHeight + " px";
       state.toolResults[runToolId] = document.getElementById("resultArea").innerHTML;
