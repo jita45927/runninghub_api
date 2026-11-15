@@ -3,7 +3,7 @@
 // 应用专属设置与配置面板通过 initModals 的 panel 参数接入（见各应用 js/ui/panels.js）。
 import { FIELD_TYPES, ICON_OPTIONS, esc } from "../config.js";
 import { state, saveTools, saveActiveId, tagsOf } from "../store.js";
-import { importToolFile, toolsDirGranted, persistTool, removeToolFile } from "../tools.js";
+import { importToolFile, toolsDirGranted, persistTool } from "../tools.js";
 import { showStatus } from "./form.js";
 
 let editingToolId = null;
@@ -341,16 +341,21 @@ export function initModals(renderAll, panel) {
   };
   document.getElementById("deleteToolBtn").onclick = async () => {
     if (!editingToolId) return;
-    if (!confirm("确定删除这个工具吗？\n将同时删除 tools 目录中的同名配置文件。")) return;
-    const delId = editingToolId;
-    const delTool = state.tools.find(x => x.id === delId);
-    state.tools = state.tools.filter(x => x.id !== delId);
-    if (state.activeId === delId) state.activeId = state.tools[0] && state.tools[0].id;
+    const delTool = state.tools.find(x => x.id === editingToolId);
+    if (!delTool) return;
+    if (state.currentRun && state.runningToolId === delTool.id) { alert("该工具正在运行，请先取消任务"); return; }
+    // 与左侧列表的 ✕ 保持一致：移入回收站，配置文件保留
+    if (!confirm("「" + (delTool.name || "未命名") + "」会被移动到回收站列表，并不会彻底删除配置文件。\n\n回收站中的工具不可使用，可随时还原。")) return;
+    delTool.deleted = true;
+    if (state.activeId === delTool.id) {
+      const first = state.tools.find(x => !x.deleted);
+      state.activeId = first ? first.id : null;
+    }
     saveTools();
     saveActiveId();
     toolModal.classList.remove("show");
     renderAll();
-    try { await removeToolFile(delTool); } catch (err) { /* 配置文件可能本来就不存在 */ }
+    try { await persistTool(delTool); } catch (err) { /* 配置文件写入失败不影响列表状态 */ }
   };
 
   // 弹窗通用关闭

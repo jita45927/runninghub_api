@@ -2,12 +2,15 @@
   "type": "runninghub-tool-config",
   "version": 1,
   "name": "文生图B2-1K低价",
-  "icon": "🎨",
+  "icon": "🧩",
   "desc": "纯文生图：提示词 + 出图比例，固定 1K 出图，适合展板/标识牌等设计排版",
+  "sourceUrl": "",
   "toolType": "app",
   "webappId": "2120368331566960642",
   "instanceType": "default",
-  "category": "文生图",
+  "tags": [
+    "文生图"
+  ],
   "fields": [
     {
       "label": "提示词",

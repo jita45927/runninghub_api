@@ -4,10 +4,13 @@
   "name": "KLEIN-单图编辑（可绘蒙版）",
   "icon": "🖌️",
   "desc": "上传单张图片按提示词编辑（FLUX.2 Klein）；可手绘蒙版，并控制是否把蒙版涂成红色叠加进图片、是否缩放输出尺寸",
+  "sourceUrl": "",
   "toolType": "workflow",
   "webappId": "2120165223045877761",
   "instanceType": "default",
-  "category": "图片编辑",
+  "tags": [
+    "图片编辑"
+  ],
   "fields": [
     {
       "label": "上传图片",

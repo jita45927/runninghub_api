@@ -1,6 +1,7 @@
 // ================= 工具首页：按分类展示封面卡片，与工作页互斥切换 =================
-import { state, saveActiveId, tagsOf } from "../store.js";
+import { state, saveActiveId, saveCats, tagsOf } from "../store.js";
 import { coverUrlFor, refreshCoverIndex, saveCover } from "../covers.js";
+import { trashTool, sortCatNames } from "./toollist.js";
 
 let rerender = null;          // 入口传入的 renderAll，用于卡片点击后刷新全页
 let currentView = "home";     // "home" | "work"
@@ -125,6 +126,16 @@ function buildCard(t) {
   body.appendChild(name);
 
   card.append(buildCover(t), body);
+
+  // 首页卡片也支持移入回收站（与左侧列表的 ✕ 同一套逻辑）
+  const del = document.createElement("button");
+  del.type = "button";
+  del.className = "home-card-del";
+  del.title = "移入回收站（不删除配置文件）";
+  del.textContent = "✕";
+  del.onclick = e => { e.stopPropagation(); trashTool(t, rerender); };
+  card.appendChild(del);
+
   card.onclick = () => {
     // 与左侧列表切换一致：先保存当前工具的结果，再恢复目标工具的界面（占位提示不写入历史）
     const area = document.getElementById("resultArea");
@@ -147,6 +158,7 @@ export function renderHome(renderAll) {
 
   const groups = new Map();
   state.tools.forEach(t => {
+    if (t.deleted) return;  // 回收站里的工具不在首页展示
     groupsOf(t).forEach(tag => {
       if (!groups.has(tag)) groups.set(tag, []);
       groups.get(tag).push(t);
@@ -161,28 +173,41 @@ export function renderHome(renderAll) {
     return;
   }
 
-  const catNames = [...groups.keys()].sort((a, b) =>
-    a === "未分类" ? 1 : b === "未分类" ? -1 : a.localeCompare(b, "zh"));
+  // 与左侧工具栏共用同一套排序规则（拖动分组后的自定义顺序）
+  const catNames = sortCatNames([...groups.keys()]);
 
   catNames.forEach(cat => {
     const tools = groups.get(cat);
     const section = document.createElement("div");
     section.className = "home-section";
 
+    const collapsed = state.collapsedCats.includes(cat);  // 与左侧栏共用收起状态
     const head = document.createElement("div");
     head.className = "home-cat";
+    head.title = collapsed ? "展开分组" : "收起分组";
+    const arrow = document.createElement("span");
+    arrow.className = "home-cat-arrow";
+    arrow.textContent = collapsed ? "▶" : "▼";
     const label = document.createElement("span");
     label.textContent = cat;
     const count = document.createElement("span");
     count.className = "home-cat-count";
     count.textContent = tools.length;
-    head.append(label, count);
+    head.append(arrow, label, count);
+    head.onclick = () => {
+      const i = state.collapsedCats.indexOf(cat);
+      if (i >= 0) state.collapsedCats.splice(i, 1); else state.collapsedCats.push(cat);
+      saveCats();
+      if (rerender) rerender(); else renderHome();
+    };
+    section.appendChild(head);
 
-    const cards = document.createElement("div");
-    cards.className = "home-grid";
-    tools.forEach(t => cards.appendChild(buildCard(t)));
-
-    section.append(head, cards);
+    if (!collapsed) {
+      const cards = document.createElement("div");
+      cards.className = "home-grid";
+      tools.forEach(t => cards.appendChild(buildCard(t)));
+      section.appendChild(cards);
+    }
     grid.appendChild(section);
   });
 }

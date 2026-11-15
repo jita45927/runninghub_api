@@ -3,7 +3,7 @@
 ; 产物：installer\RunningHub-AI-Toolbox-Setup-<版本>.exe
 
 #define MyAppName "RunningHub AI 设计师工具箱"
-#define MyAppVersion "1.2.1"
+#define MyAppVersion "1.2.2"
 #define MyAppPublisher "RunningHub AI"
 #define MyAppExeName "RunningHubToolbox.exe"
 
@@ -27,6 +27,8 @@ WizardStyle=modern
 VersionInfoVersion={#MyAppVersion}.0
 VersionInfoDescription={#MyAppName} 安装程序
 VersionInfoProductName={#MyAppName}
+; 程序无窗口，Inno 的"自动关闭应用"无法结束它，改由下方 [Code] 直接结束进程
+CloseApplications=no
 
 [Languages]
 Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
@@ -45,3 +47,25 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilen
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "立即启动 {#MyAppName}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+procedure KillRunningApp;
+var
+  ResultCode: Integer;
+begin
+  // 无窗口进程：Restart Manager 关不掉，安装/卸载前先强制结束，避免文件被占用
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(600);
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  KillRunningApp;
+  Result := True;
+end;
+
+function InitializeUninstall(): Boolean;
+begin
+  KillRunningApp;
+  Result := True;
+end;

@@ -29,7 +29,7 @@ body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: va
   padding: 0 20px; background: var(--panel); border-bottom: 1px solid var(--border);
 }
 .logo { font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
-.logo-badge { background: linear-gradient(135deg, #5b8cff, #9b5bff); width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 15px; }
+.logo-badge { width: 30px; height: 30px; border-radius: 8px; display: block; object-fit: cover; flex-shrink: 0; }
 .key-btn {
   display: flex; align-items: center; gap: 8px; background: var(--panel2); border: 1px solid var(--border);
   color: var(--text); padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 13px;
@@ -57,6 +57,10 @@ body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: va
   color: #7f8bb3; font-size: 12px; font-weight: 600;
 }
 .cat-header:hover { color: #aeb9dd; }
+.cat-header[draggable="true"] { cursor: grab; }
+.cat-header.dragging { opacity: .45; }
+.cat-header.drop-before { box-shadow: inset 0 2px 0 0 #5b8cff; color: #dbe4ff; }
+.cat-header.drop-after { box-shadow: inset 0 -2px 0 0 #5b8cff; color: #dbe4ff; }
 .cat-arrow { font-size: 10px; width: 12px; }
 .cat-name { flex: 1; }
 .cat-count {
@@ -95,6 +99,25 @@ body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: va
 }
 .tool-item:hover .tool-del { display: flex; }
 .tool-del:hover { background: var(--danger); color: #fff; }
+/* 回收站条目：置灰 + 名称划线，操作按钮常显（↩ 还原 / ✕ 永久删除） */
+.tool-item.trashed { opacity: .6; }
+.tool-item.trashed:hover { opacity: .9; }
+.tool-item.trashed .tool-name { text-decoration: line-through; }
+.tool-item.trashed .tool-del { display: flex; }
+.tool-restore {
+  position: absolute; right: 32px; top: 8px; width: 20px; height: 20px; border-radius: 6px;
+  color: #6a7694; display: flex; align-items: center; justify-content: center; font-size: 12px;
+}
+.tool-restore:hover { background: var(--accent); color: #fff; }
+/* 分类头右侧的「清空」按钮（仅回收站） */
+.cat-clear { font-size: 11px; font-weight: 400; color: #6a7694; padding: 1px 6px; border-radius: 6px; }
+.cat-clear:hover { background: var(--danger); color: #fff; }
+/* 回收站工具的只读提示条 */
+.trash-notice {
+  margin: 0 0 12px; padding: 9px 12px; border-radius: 8px;
+  background: rgba(255, 171, 64, .12); border: 1px solid rgba(255, 171, 64, .35);
+  color: #ffcf8a; font-size: 12px; line-height: 1.6;
+}
 .tool-icon { width: 38px; height: 38px; border-radius: 9px; background: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 19px; flex-shrink: 0; }
 .tool-item.active .tool-icon { background: linear-gradient(135deg, #5b8cff33, #9b5bff33); }
 .tool-meta { min-width: 0; }
@@ -337,10 +360,13 @@ label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px
 .home-head h2 { font-size: 20px; }
 .home-head p { font-size: 12px; color: var(--muted); margin-top: 4px; }
 .home-section { margin-bottom: 26px; }
-.home-cat { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 13px; font-weight: 600; color: #aeb9dd; }
+.home-cat { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 13px; font-weight: 600; color: #aeb9dd; cursor: pointer; user-select: none; }
+.home-cat:hover { color: #dbe4ff; }
+.home-cat-arrow { font-size: 10px; width: 10px; color: #7f8bb3; }
 .home-cat-count { background: #232a45; border-radius: 8px; padding: 1px 7px; font-size: 11px; font-weight: 400; color: #8f9bc0; }
 .home-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
 .home-card {
+  position: relative;
   background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
   overflow: hidden; cursor: pointer; transition: transform .15s, border-color .15s, box-shadow .15s;
 }
@@ -365,6 +391,15 @@ label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px
   opacity: .92; transition: background .15s, border-color .15s, opacity .15s;
 }
 .home-cover-upload:hover { background: var(--accent); border-color: var(--accent); color: #fff; opacity: 1; }
+/* 首页卡片右上角：移入回收站（悬停显示） */
+.home-card-del {
+  position: absolute; top: 8px; right: 8px; z-index: 3;
+  width: 24px; height: 24px; border-radius: 8px; border: 1px solid rgba(255,255,255,.18);
+  background: rgba(15,19,32,.74); color: #dfe6ff; font-size: 12px; cursor: pointer;
+  display: none; align-items: center; justify-content: center;
+}
+.home-card:hover .home-card-del { display: flex; }
+.home-card-del:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
 .home-toast {
   position: fixed; left: 50%; bottom: 34px; transform: translateX(-50%); z-index: 9999;
   max-width: 80vw; padding: 10px 18px; border-radius: 10px; font-size: 13px;

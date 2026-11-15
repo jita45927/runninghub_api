@@ -2,15 +2,14 @@
   "type": "runninghub-tool-config",
   "version": 1,
   "name": "Z-image-turbo文生图",
-  "icon": "🧩",
+  "icon": "🖼️",
   "desc": "文生图：提示词 + 画面尺寸 + 光效 LORA 强度",
   "sourceUrl": "https://www.runninghub.cn/post/2120118502882365442",
   "toolType": "app",
   "webappId": "2120130628074164226",
   "instanceType": "default",
   "tags": [
-    "文生图",
-    "人物创作"
+    "文生图"
   ],
   "fields": [
     {

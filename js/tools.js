@@ -8,7 +8,9 @@ function toolToConfigJSON(t) {
     type: "runninghub-tool-config",
     version: 1,
     name: t.name, icon: t.icon, desc: t.desc, sourceUrl: t.sourceUrl || "", toolType: t.toolType || "app",
-    webappId: t.webappId, instanceType: t.instanceType, tags: tagsOf(t), fields: t.fields
+    webappId: t.webappId, instanceType: t.instanceType, tags: tagsOf(t), fields: t.fields,
+    // 回收站状态随配置文件持久化，重启后仍留在回收站
+    ...(t.deleted ? { deleted: true } : {})
   }, null, 2);
 }
 
@@ -96,8 +98,14 @@ export async function scanToolsDir(renderAll) {
       delete t.category;  // 旧版单值分类统一迁移为标签数组
       // 同应用ID或同名视为同一工具：以文件内容为准更新（保证 tools 目录是权威配置）
       const idx = state.tools.findIndex(x => (t.webappId && x.webappId === t.webappId) || (t.name && x.name === t.name));
-      if (idx >= 0) { state.tools[idx] = { ...t, id: state.tools[idx].id }; }
-      else { state.tools.push(t); }
+      if (idx >= 0) {
+        const keepId = state.tools[idx].id;
+        state.tools[idx] = { ...t, id: keepId };
+        state.toolFileNames[keepId] = f;  // 记录真实文件名，改名/删除时按它操作
+      } else {
+        state.tools.push(t);
+        state.toolFileNames[t.id] = f;
+      }
       changed = true;
     }
     if (changed) { saveTools(); renderAll(); }
@@ -187,14 +195,18 @@ export async function persistTool(t) {
   if (!t) return null;
   if (location.protocol.startsWith("http")) {
     try {
+      const file = toolFileName(t);
       const r = await fetch("/save-tool", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ file: toolFileName(t), content: toolToConfigJSON(t) })
+        body: JSON.stringify({ file, oldFile: state.toolFileNames[t.id] || "", content: toolToConfigJSON(t) })
       });
       if (r.ok) {
         const j = await r.json();
-        if (j && j.ok) return j.file;
+        if (j && j.ok) {
+          state.toolFileNames[t.id] = j.file || file;  // 服务端可能已清理旧文件
+          return j.file || file;
+        }
       }
     } catch (e) { /* 旧版服务没有该接口，退回目录句柄 */ }
   }
@@ -210,9 +222,12 @@ export async function removeToolFile(tool) {
       const r = await fetch("/delete-tool", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ file: toolFileName(tool) })
+        body: JSON.stringify({ file: state.toolFileNames[tool.id] || toolFileName(tool) })
       });
-      if (r.ok) return true;
+      if (r.ok) {
+        delete state.toolFileNames[tool.id];
+        return true;
+      }
     } catch (e) { /* 旧版服务没有该接口，退回目录句柄 */ }
   }
   if (await toolsDirGranted()) {

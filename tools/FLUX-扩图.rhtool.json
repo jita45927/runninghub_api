@@ -4,10 +4,13 @@
   "name": "FLUX-扩图",
   "icon": "🧩",
   "desc": "按照边长倍数扩展图片，自动补充空白",
+  "sourceUrl": "",
   "toolType": "app",
   "webappId": "2034676742782197762",
   "instanceType": "default",
-  "category": "效果图处理",
+  "tags": [
+    "效果图处理"
+  ],
   "fields": [
     {
       "label": "上传图片",

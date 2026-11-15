@@ -65,6 +65,21 @@ export function renderWorkspace() {
 
   state.fieldFiles = t ? (state.fieldFilesByTool[t.id] || (state.fieldFilesByTool[t.id] = {})) : {};  // 恢复当前工具已选的图片
   const form = document.getElementById("formArea");
+
+  // 回收站中的工具：允许打开查看配置，但禁用运行
+  let notice = document.getElementById("wsTrashNotice");
+  if (!notice) {
+    notice = document.createElement("div");
+    notice.id = "wsTrashNotice";
+    notice.className = "trash-notice";
+    form.parentNode.insertBefore(notice, form);
+  }
+  const trashed = !!(t && t.deleted);
+  notice.style.display = trashed ? "" : "none";
+  notice.textContent = "🗑 该工具在回收站中：可以查看配置，但不能运行。点击左侧条目上的 ↩ 可还原。";
+  const runBtn = document.getElementById("runBtn");
+  if (runBtn) runBtn.disabled = trashed;
+
   if (!t || !t.fields || !t.fields.length) {
     form.innerHTML = '<div style="color:#4a5470;font-size:13px;padding:8px 0">此工具还没有输入项，点右上角「配置此工具」添加。</div>';
     return;

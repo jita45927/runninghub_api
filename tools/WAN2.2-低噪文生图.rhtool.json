@@ -1,0 +1,51 @@
+{
+  "type": "runninghub-tool-config",
+  "version": 1,
+  "name": "WAN2.2-低噪文生图",
+  "icon": "🖼️",
+  "desc": "WAN2.2模型文生图，非生成视频，适合古典场景人物",
+  "sourceUrl": "",
+  "toolType": "app",
+  "webappId": "1988199879161896961",
+  "instanceType": "default",
+  "tags": [
+    "文生图"
+  ],
+  "fields": [
+    {
+      "label": "正向提示词",
+      "type": "textarea",
+      "nodeId": "227",
+      "fieldName": "text",
+      "def": "一位女子端坐在雕花精美的木床上，床铺覆着刺绣织物，四周笼罩在暖光之中。她身着一袭淡粉色传统长裙，前襟点缀着精致的花朵刺绣。裙装层叠飘逸，外搭半透明虹彩披肩，在灯光下泛着柔光。她的发髻高挽，造型繁复，金质发簪与花卉头饰交错生辉，垂坠的珠珞流苏随风轻摆，尽显古典韵味。身后粉纱帷幔如瀑垂落，为画面勾勒出柔美边框。床侧右方悬着一盏古式灯笼，透出暖金色光晕。场景中陈列着红烛，烛台纹饰华丽，为整体增添传统雅致的气息。整个氛围透露出浓厚的历史文化意蕴。"
+    },
+    {
+      "label": "反向提示词",
+      "type": "textarea",
+      "nodeId": "231",
+      "fieldName": "text",
+      "def": "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry, ugly, deformed, malformed limbs, extra limbs, missing limbs, mutated hands, poorly drawn hands, poorly drawn face, disfigured, mutated,oily skin, distorted eyes, asymmetrical eyes"
+    },
+    {
+      "label": "随机种子",
+      "type": "number",
+      "nodeId": "228",
+      "fieldName": "seed",
+      "def": "119885254382971"
+    },
+    {
+      "label": "图片宽度",
+      "type": "number",
+      "nodeId": "267",
+      "fieldName": "value",
+      "def": "1024"
+    },
+    {
+      "label": "图片高度",
+      "type": "number",
+      "nodeId": "268",
+      "fieldName": "value",
+      "def": "1536"
+    }
+  ]
+}

@@ -19,6 +19,7 @@ export const state = {
   toolsDirHandle: null,  // 配置目录（tools/）句柄，授权后 tools 目录成为工具配置唯一数据源
   toolFileNames: {},     // 工具 id → 配置目录中的文件名（用于改名时删除旧文件）
   collapsedCats: [],     // 左侧栏中被收起的分类名
+  catOrder: [],          // 左侧栏分类的自定义排列顺序（拖动分组头部后保存）
 };
 
 // localStorage 数据损坏时回退到内置默认工具，避免页面白屏
@@ -73,6 +74,16 @@ if (migratedTags) saveTools();
 try { state.collapsedCats = JSON.parse(localStorage.getItem(LS.cats) || "[]"); }
 catch (e) { state.collapsedCats = []; }
 export function saveCats() { localStorage.setItem(LS.cats, JSON.stringify(state.collapsedCats)); }
+
+// 分类排序持久化：key 内置在公共核心，避免依赖各项目 config.js 的键名定义
+const CAT_ORDER_KEY = "rh_cat_order_v1";
+try {
+  const rawOrder = JSON.parse(localStorage.getItem(CAT_ORDER_KEY) || "[]");
+  state.catOrder = Array.isArray(rawOrder) ? rawOrder.filter(x => typeof x === "string") : [];
+} catch (e) { state.catOrder = []; }
+export function saveCatOrder() {
+  try { localStorage.setItem(CAT_ORDER_KEY, JSON.stringify(state.catOrder)); } catch (e) {}
+}
 
 // 最近完成工具持久化（刷新页面后仍保留高亮）
 try { state.lastDoneToolId = localStorage.getItem(LS.lastDone) || null; } catch (e) {}

@@ -301,12 +301,72 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         fn = _safe_filename(obj.get("file"), "tool.rhtool.json")
         if not fn.lower().endswith(".json"):
             fn += ".rhtool.json"
+        content = obj.get("content") or ""
+        try:
+            cfg = json.loads(content)
+        except Exception:
+            cfg = {}
         try:
             with open(os.path.join(_tools_dir(), fn), "w", encoding="utf-8") as f:
-                f.write(obj.get("content") or "")
-            self._send_json(200, {"ok": True, "file": fn})
+                f.write(content)
         except Exception as e:
             self._send_json(500, {"ok": False, "error": str(e)})
+            return
+        # 改名时清理旧配置文件；同一应用只保留一份（按 webappId 兜底去重）
+        removed = []
+        old = obj.get("oldFile") or ""
+        if old and old != fn:
+            removed += self._remove_tool_files(old)
+        removed += self._remove_duplicate_tools(fn, cfg)
+        self._send_json(200, {"ok": True, "file": fn, "removed": removed})
+
+    def _remove_tool_files(self, fn):
+        """删除配置文件及其同名封面，返回被删除的文件名列表。"""
+        fn = _safe_filename(fn, "")
+        if not fn:
+            return []
+        d = _tools_dir()
+        removed = []
+        if os.path.isfile(os.path.join(d, fn)):
+            try:
+                os.remove(os.path.join(d, fn))
+                removed.append(fn)
+            except OSError:
+                pass
+            base = re.sub(r"\.rhtool\.json$", "", fn, flags=re.I)
+            for ext in (".png", ".jpg"):
+                try:
+                    os.remove(os.path.join(d, base + ext))
+                    removed.append(base + ext)
+                except OSError:
+                    pass
+        return removed
+
+    def _remove_duplicate_tools(self, keep_fn, cfg):
+        """同一 webappId（缺失时按工具名）的其它配置视为旧版本删除。"""
+        wid = str(cfg.get("webappId") or "").strip()
+        name = str(cfg.get("name") or "").strip()
+        if not wid and not name:
+            return []
+        d = _tools_dir()
+        removed = []
+        try:
+            entries = os.listdir(d)
+        except OSError:
+            return []
+        for fn in entries:
+            if fn == keep_fn or not fn.lower().endswith(".rhtool.json"):
+                continue
+            try:
+                with open(os.path.join(d, fn), encoding="utf-8") as f:
+                    other = json.load(f)
+            except Exception:
+                continue
+            same = (wid and str(other.get("webappId") or "").strip() == wid) or \
+                   (name and str(other.get("name") or "").strip() == name)
+            if same:
+                removed += self._remove_tool_files(fn)
+        return removed
 
     def _handle_delete_tool(self):
         obj = self._read_json_body()
@@ -317,6 +377,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if fn:
             try: os.remove(os.path.join(_tools_dir(), fn))
             except OSError: pass
+            # 永久删除工具时一并清理同名封面 tools/<基名>.png|jpg
+            base = re.sub(r"\.rhtool\.json$", "", fn, flags=re.I)
+            for ext in (".png", ".jpg"):
+                try: os.remove(os.path.join(_tools_dir(), base + ext))
+                except OSError: pass
         self._send_json(200, {"ok": True})
 
     def _handle_save_image(self):

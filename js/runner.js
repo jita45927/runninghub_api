@@ -82,6 +82,7 @@ export async function runActiveTool() {
   const tool = activeTool();
   if (!apiKey()) { showStatus("请先点击右上角设置 API Key", "error"); return; }
   if (!tool) { showStatus("请先在左侧选择一个工具", "error"); return; }
+  if (tool.deleted) { showStatus("该工具在回收站中，请先在左侧还原再使用", "error"); return; }
   if (!tool.webappId) { showStatus("当前工具未填写应用 ID，请点击右上角「配置此工具」", "error"); return; }
 
   runBtn.disabled = true;
@@ -224,7 +225,8 @@ export async function runActiveTool() {
     showStatus("❌ " + err.message, "error");
     showResultNotice(runToolId, '<div class="result-placeholder">生成失败</div>');
   } finally {
-    runBtn.disabled = false;
+    const cur = activeTool();
+    runBtn.disabled = !!(cur && cur.deleted);  // 当前查看的是回收站工具时保持禁用
     document.getElementById("cancelBtn").style.display = "none";
     state.currentRun = null;
     state.runningToolId = null;

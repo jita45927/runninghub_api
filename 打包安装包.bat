@@ -26,5 +26,5 @@ if errorlevel 1 (
 )
 
 echo.
-echo 完成：installer\RunningHub-AI-Toolbox-Setup-1.2.1.exe
+echo 完成：installer\RunningHub-AI-Toolbox-Setup-1.2.2.exe
 pause
