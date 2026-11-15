@@ -8,6 +8,7 @@ import threading
 import traceback
 import subprocess
 import webbrowser
+import shutil
 import urllib.request
 import ctypes
 from ctypes import wintypes
@@ -24,6 +25,8 @@ def app_dir():
 
 
 BASE = app_dir()
+DATA = (os.path.join(os.environ["LOCALAPPDATA"], "RunningHubToolbox", "data")
+        if getattr(sys, "frozen", False) and os.environ.get("LOCALAPPDATA") else BASE)
 os.chdir(BASE)
 LOG = os.path.join(BASE, "启动日志.log")
 APP_TITLE = "RunningHub AI设计师工具箱"
@@ -60,25 +63,60 @@ def start_log():
     log("Python %s" % sys.version.replace("\n", " "))
 
 
+def _same_path(a, b):
+    return os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b))
+
+
+def _read_download(path):
+    try:
+        with open(path, "r", encoding="utf-8-sig") as f:
+            lines = [l.strip() for l in f.read().splitlines() if l.strip()]
+        return lines[1] if len(lines) >= 2 else ""
+    except OSError:
+        return ""
+
+
+def _copy_missing(src, dst):
+    """迁移时只补缺失文件，同名用户文件绝不覆盖。"""
+    if not os.path.isdir(src) or _same_path(src, dst):
+        return
+    for root, dirs, files in os.walk(src):
+        rel = os.path.relpath(root, src)
+        target_dir = os.path.join(dst, rel) if rel != "." else dst
+        os.makedirs(target_dir, exist_ok=True)
+        for name in files:
+            source = os.path.join(root, name)
+            target = os.path.join(target_dir, name)
+            if not os.path.exists(target):
+                shutil.copy2(source, target)
+
+
 def ensure_dirs():
     for name in ("tools", "download"):
-        os.makedirs(os.path.join(BASE, name), exist_ok=True)
+        os.makedirs(os.path.join(DATA, name), exist_ok=True)
+    if _same_path(DATA, BASE) or os.path.isfile(os.path.join(DATA, "appinfo.txt")):
+        return
+
+    # 新数据目录第一次启用：先保留旧安装的实际数据，再补齐只读内置模板。
+    _copy_missing(os.path.join(BASE, "tools"), os.path.join(DATA, "tools"))
+    _copy_missing(os.path.join(BASE, "builtin-tools"), os.path.join(DATA, "tools"))
+    legacy_download = _read_download(os.path.join(BASE, "appinfo.txt"))
+    if (not legacy_download or not os.path.isdir(legacy_download)
+            or _same_path(legacy_download, os.path.join(BASE, "download"))):
+        _copy_missing(os.path.join(BASE, "download"), os.path.join(DATA, "download"))
 
 
 def write_appinfo():
-    """第一行固定为本机 tools 目录；第二行保留用户已选下载目录，失效则回退到程序目录下 download。"""
-    tools = os.path.join(BASE, "tools")
-    download = ""
-    path = os.path.join(BASE, "appinfo.txt")
-    if os.path.isfile(path):
-        try:
-            with open(path, "r", encoding="utf-8-sig") as f:
-                lines = [l.strip() for l in f.read().splitlines() if l.strip()]
-            download = lines[1] if len(lines) >= 2 else ""
-        except OSError:
-            download = ""
-    if not download or not os.path.isdir(download):
-        download = os.path.join(BASE, "download")
+    """记录用户 tools/download 路径；旧默认下载目录迁移后不再指回安装目录。"""
+    tools = os.path.join(DATA, "tools")
+    path = os.path.join(DATA, "appinfo.txt")
+    source_path = path
+    if not _same_path(DATA, BASE) and not os.path.isfile(path):
+        source_path = os.path.join(BASE, "appinfo.txt")
+    download = _read_download(source_path)
+    if (not download or not os.path.isdir(download)
+            or _same_path(download, os.path.join(BASE, "download"))):
+        download = os.path.join(DATA, "download")
     os.makedirs(download, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write(tools + "\n" + download + "\n")
@@ -256,7 +294,11 @@ def request_exit(*_):
 def _request_shutdown():
     global _EXITING
     try:
-        req = urllib.request.Request(APP_URL + "shutdown", data=b"", method="POST")
+        import server
+        req = urllib.request.Request(
+            APP_URL + "shutdown", data=b"", method="POST",
+            headers={server.LOCAL_TOKEN_HEADER: server.ACCESS_TOKEN},
+        )
         with urllib.request.urlopen(req, timeout=5):
             pass
     except Exception as e:

@@ -1,6 +1,7 @@
 // ================= 工具配置：导入 / 导出 / tools 目录自动扫描 =================
 import { state, saveTools, saveActiveId, tagsOf } from "./store.js";
 import { showStatus } from "./ui/form.js";
+import { localFetch } from "./api.js";
 
 // 工具对象 → 配置文件 JSON（与导出/目录文件格式一致）
 function toolToConfigJSON(t) {
@@ -196,7 +197,7 @@ export async function persistTool(t) {
   if (location.protocol.startsWith("http")) {
     try {
       const file = toolFileName(t);
-      const r = await fetch("/save-tool", {
+      const r = await localFetch("/save-tool", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ file, oldFile: state.toolFileNames[t.id] || "", content: toolToConfigJSON(t) })
@@ -219,7 +220,7 @@ export async function removeToolFile(tool) {
   if (!tool) return false;
   if (location.protocol.startsWith("http")) {
     try {
-      const r = await fetch("/delete-tool", {
+      const r = await localFetch("/delete-tool", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ file: state.toolFileNames[tool.id] || toolFileName(tool) })

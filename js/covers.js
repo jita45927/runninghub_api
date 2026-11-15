@@ -2,6 +2,7 @@
 // 索引优先从已授权的 tools 目录读取；未授权时回退到 HTTP 目录列表或约定路径
 import { state } from "./store.js";
 import { toolsDirGranted, toolBaseName } from "./tools.js";
+import { localFetch } from "./api.js";
 
 const IMG_RE = /\.(png|jpe?g)$/i;
 const MAX_COVER_SIZE = 8 * 1024 * 1024;
@@ -121,7 +122,7 @@ export async function saveCover(toolName, file) {
   // 本地服务模式：POST /save-cover，浏览器无需任何文件夹授权
   if (location.protocol.startsWith("http")) {
     try {
-      const r = await fetch("/save-cover?name=" + encodeURIComponent(base), { method: "POST", body: blob });
+      const r = await localFetch("/save-cover?name=" + encodeURIComponent(base), { method: "POST", body: blob });
       if (r.ok) {
         const j = await r.json();
         if (j && j.ok && j.file) savedName = j.file;
@@ -163,7 +164,7 @@ export async function renameCover(oldToolName, newToolName) {
   // 本地服务模式：由 server 直接重命名文件
   if (location.protocol.startsWith("http")) {
     try {
-      const r = await fetch("/rename-cover", {
+      const r = await localFetch("/rename-cover", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ old: oldBase, new: newBase })

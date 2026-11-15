@@ -1,7 +1,8 @@
 @echo off
 chcp 65001 >nul
-cd /d %~dp0
+cd /d "%~dp0"
 set PORT=8900
+set "RH_APP_DIR=%CD%"
 
 rem ----------------------------------------------------------
 rem ?? appinfo.txt?UTF-8??
@@ -10,7 +11,8 @@ rem   Line 2 = ?????????????? FolderBrowserDialog?
 rem ----------------------------------------------------------
 powershell -NoProfile -STA -Command ^
   "Add-Type -AssemblyName System.Windows.Forms;" ^
-  "$tools = '%CD%\tools';" ^
+  "$tools = Join-Path $env:RH_APP_DIR 'tools';" ^
+  "$fallback = Join-Path $env:RH_APP_DIR 'download';" ^
   "$dl = '';" ^
   "if (Test-Path 'appinfo.txt') {" ^
   "  $lines = Get-Content -Path 'appinfo.txt' -Encoding UTF8;" ^
@@ -20,10 +22,10 @@ powershell -NoProfile -STA -Command ^
   "  $d = New-Object System.Windows.Forms.FolderBrowserDialog;" ^
   "  $d.Description = 'Select download directory';" ^
   "  $d.ShowNewFolderButton = $true;" ^
-  "  $d.SelectedPath = '%CD%\download';" ^
+  "  $d.SelectedPath = $fallback;" ^
   "  if ($d.ShowDialog() -eq 'OK') { $dl = $d.SelectedPath }" ^
   "}" ^
-  "if (-not $dl) { $dl = '%CD%\download' }" ^
+  "if (-not $dl) { $dl = $fallback }" ^
   "if (-not (Test-Path $dl)) { New-Item -ItemType Directory -Path $dl -Force | Out-Null }" ^
   "[System.IO.File]::WriteAllLines('appinfo.txt', @($tools, $dl), [System.Text.UTF8Encoding]::new($false))"
 

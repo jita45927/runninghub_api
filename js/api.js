@@ -7,6 +7,25 @@ export function authHeaders() {
   return { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey() };
 }
 
+// 本地服务每次启动都会换令牌；跨站网页无法读取 /appinfo，也不能伪造自定义请求头。
+let localToken = "";
+export function setLocalToken(token) { localToken = token || ""; }
+
+export async function localFetch(path, options = {}) {
+  if (!localToken && location.protocol.startsWith("http")) {
+    try {
+      const r = await fetch("/appinfo");
+      if (r.ok) {
+        const info = await r.json();
+        localToken = info.token || "";
+      }
+    } catch (e) { /* 非本地服务模式时由后续请求按原逻辑失败或回退 */ }
+  }
+  const headers = new Headers(options.headers || {});
+  if (localToken) headers.set("X-RunningHub-Token", localToken);
+  return fetch(path, { ...options, headers });
+}
+
 // 接口响应兜底：HTTP 错误或非 JSON 响应统一抛出可读错误
 export async function parseRespJson(resp) {
   let json = null;

@@ -37,8 +37,8 @@ Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.i
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加任务："; Flags: checkedonce
 
 [Files]
-; 打包 PyInstaller 产物：exe + 网页资源 + 内置工具配置与封面
-Source: "dist\RunningHubToolbox\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; 只安装程序资源和 builtin-tools 只读模板；用户 tools/download/appinfo 永远不进安装目录
+Source: "dist\RunningHubToolbox\*"; DestDir: "{app}"; Excludes: "appinfo.txt,tools\*,download\*"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"

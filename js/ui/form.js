@@ -78,7 +78,8 @@ export function renderWorkspace() {
   notice.style.display = trashed ? "" : "none";
   notice.textContent = "🗑 该工具在回收站中：可以查看配置，但不能运行。点击左侧条目上的 ↩ 可还原。";
   const runBtn = document.getElementById("runBtn");
-  if (runBtn) runBtn.disabled = trashed;
+  // 当前版本一次只允许一个任务；切换工具不得重新启用运行按钮。
+  if (runBtn) runBtn.disabled = trashed || !!state.currentRun;
 
   if (!t || !t.fields || !t.fields.length) {
     form.innerHTML = '<div style="color:#4a5470;font-size:13px;padding:8px 0">此工具还没有输入项，点右上角「配置此工具」添加。</div>';

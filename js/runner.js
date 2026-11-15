@@ -1,6 +1,6 @@
 // ================= 任务运行流程：组装参数、提交、轮询、取消、自动下载、扣费提示 =================
 import { state, activeTool, saveToDir, saveLastDone, saveTools } from "./store.js";
-import { apiKey, uploadImage, createTask, queryTask, cancelTask, enrichSelectOptions } from "./api.js";
+import { apiKey, uploadImage, createTask, queryTask, cancelTask, enrichSelectOptions, localFetch } from "./api.js";
 import { showStatus, refreshSelectOptions } from "./ui/form.js";
 import { buildResultHtml, bindResultImageDims } from "./ui/results.js";
 import { refreshToolItemStates } from "./ui/toollist.js";
@@ -62,10 +62,10 @@ function showResultNotice(toolId, html) {
 }
 
 // 轮询查询任务（v2 查询接口直接返回状态+结果）
-async function waitTask(taskId, onTick) {
+async function waitTask(taskId, run, onTick) {
   for (let i = 0; i < 200; i++) {
     await new Promise(r => setTimeout(r, 3000));
-    if (state.currentRun && state.currentRun.cancelled) return { cancelled: true, results: [], usage: {} };
+    if (run.cancelled) return { cancelled: true, results: [], usage: {} };
     const json = await queryTask(taskId);
     onTick(json.status, i);
     if (json.status === "SUCCESS") return { results: json.results || [], usage: json.usage || {} };
@@ -79,6 +79,10 @@ async function waitTask(taskId, onTick) {
 // ================= 主流程 =================
 export async function runActiveTool() {
   const runBtn = document.getElementById("runBtn");
+  if (state.currentRun) {
+    showStatus("已有任务正在运行，请先等待完成或取消当前任务", "error");
+    return;
+  }
   const tool = activeTool();
   if (!apiKey()) { showStatus("请先点击右上角设置 API Key", "error"); return; }
   if (!tool) { showStatus("请先在左侧选择一个工具", "error"); return; }
@@ -90,14 +94,15 @@ export async function runActiveTool() {
   state.runningToolId = runToolId;
   // 一开始就建立运行上下文并显示取消按钮：上传阶段也能随时中断
   const abortCtrl = new AbortController();
-  state.currentRun = { taskId: null, cancelled: false, abortCtrl };
+  const run = { taskId: null, cancelled: false, abortCtrl };
+  state.currentRun = run;
   const cancelBtn = document.getElementById("cancelBtn");
   cancelBtn.style.display = ""; cancelBtn.disabled = false;
   refreshToolItemStates();  // 左侧列表立即显示"生成中"高亮
   // 不在开始时清空结果区：保留历史结果，进度由状态栏提示
   // 检查是否已被取消（各阶段之间调用，避免取消后继续提交）
   const throwIfCancelled = () => {
-    if (state.currentRun && state.currentRun.cancelled) throw new DOMException("已取消", "AbortError");
+    if (run.cancelled) throw new DOMException("已取消", "AbortError");
   };
   try {
     // 逐字段组装 nodeInfoList
@@ -127,14 +132,14 @@ export async function runActiveTool() {
     throwIfCancelled();
     showStatus("🚀 正在创建任务…");
     const taskId = await createTask(tool, nodeInfoList, abortCtrl.signal);
-    if (state.currentRun) state.currentRun.taskId = taskId;
+    run.taskId = taskId;
     // 任务已提交成功但用户此刻点了取消：需要同时通知服务端停止，避免继续扣费
-    if (state.currentRun && state.currentRun.cancelled) {
+    if (run.cancelled) {
       try { await cancelTask(taskId); } catch (e) {}
       throw new DOMException("已取消", "AbortError");
     }
     showStatus("⏳ 任务运行中（taskId: " + taskId + "）…");
-    const { results, usage, cancelled } = await waitTask(taskId, (s, i) => {
+    const { results, usage, cancelled } = await waitTask(taskId, run, (s, i) => {
       showStatus("⏳ 任务状态：" + (s || "未知") + "（已等待 " + (i * 3 + 3) + " 秒）");
     });
 
@@ -163,7 +168,7 @@ export async function runActiveTool() {
       // 本地服务模式：由 server 直接下载到已配置的下载目录，浏览器无需授权
       if (location.protocol.startsWith("http")) {
         try {
-          const r = await fetch("/save-image", {
+          const r = await localFetch("/save-image", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ url: it.url, filename: fname })
@@ -217,7 +222,7 @@ export async function runActiveTool() {
     showStatus(costText + optionTip + "。链接24小时内有效，请及时下载", "success");
   } catch (err) {
     // 用户主动取消（上传/提交阶段被中断）：静默收尾，不显示成错误
-    if (err.name === "AbortError" || (state.currentRun && state.currentRun.cancelled)) {
+    if (err.name === "AbortError" || run.cancelled) {
       showStatus("⏹ 已取消", "");
       showResultNotice(runToolId, '<div class="result-placeholder">已取消</div>');
       return;
@@ -226,10 +231,13 @@ export async function runActiveTool() {
     showResultNotice(runToolId, '<div class="result-placeholder">生成失败</div>');
   } finally {
     const cur = activeTool();
-    runBtn.disabled = !!(cur && cur.deleted);  // 当前查看的是回收站工具时保持禁用
-    document.getElementById("cancelBtn").style.display = "none";
-    state.currentRun = null;
-    state.runningToolId = null;
+    // 只允许本次运行清理自己的上下文，避免异步收尾误清除其它运行状态。
+    if (state.currentRun === run) {
+      state.currentRun = null;
+      state.runningToolId = null;
+      cancelBtn.style.display = "none";
+    }
+    runBtn.disabled = !!state.currentRun || !!(cur && cur.deleted);
     refreshToolItemStates();  // 运行结束：黄色高亮转为"最近完成"或恢复默认
   }
 }

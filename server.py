@@ -1,10 +1,11 @@
 # 本地开发服务器：禁止一切缓存，保证浏览器永远拿到最新代码
 # 扩展路由：
-#   /appinfo            → 返回 {tools, download, session}，session 每次启动都不同
+#   /appinfo            → 返回 {tools, download, session, token}，会话与令牌每次启动都不同
 #   /open-dir?path=...  → 调起 Windows 资源管理器打开指定目录
 #   /pick-download-dir  → 弹系统 FolderBrowserDialog 让用户选下载目录，写回 appinfo.txt 第二行
 import http.server, os, sys, json, locale, subprocess, shlex, uuid, re, urllib.request, threading, webbrowser, time
-from urllib.parse import urlparse, parse_qs, unquote
+import hmac, ipaddress, socket, html
+from urllib.parse import urlparse, parse_qs, unquote, quote
 
 # 程序根目录：源码运行时是 server.py 所在目录；打包成 exe 后是 exe 所在目录
 def _app_dir():
@@ -12,10 +13,21 @@ def _app_dir():
         return os.path.dirname(os.path.abspath(sys.executable))
     return os.path.dirname(os.path.abspath(__file__))
 
-os.chdir(_app_dir())
+def _data_dir():
+    """安装版把可变数据放到用户目录；源码运行仍使用项目目录。"""
+    local = os.environ.get("LOCALAPPDATA")
+    if getattr(sys, "frozen", False) and local:
+        return os.path.join(local, "RunningHubToolbox", "data")
+    return _app_dir()
 
-APPINFO = "appinfo.txt"
+
+os.chdir(_app_dir())
+DATA_DIR = _data_dir()
+os.makedirs(DATA_DIR, exist_ok=True)
+APPINFO = os.path.join(DATA_DIR, "appinfo.txt")
 SESSION_ID = uuid.uuid4().hex  # 每次启动 server 生成新会话号，用于清空上一次的生成结果
+ACCESS_TOKEN = uuid.uuid4().hex  # 本地变更接口的每次启动随机凭证，不能依赖 CORS 防护
+LOCAL_TOKEN_HEADER = "X-RunningHub-Token"
 
 def _read_appinfo_lines():
     """读取 appinfo.txt，返回有效行列表。自动检测 UTF-8 / UTF-8-SIG / GBK。"""
@@ -54,26 +66,26 @@ def _safe_filename(name, fallback):
     return name or fallback
 
 def _tools_dir():
-    """工具配置目录；appinfo.txt 里的路径在别的电脑上不可用时回退到程序目录下的 tools。"""
+    """工具配置目录；appinfo.txt 里的路径不可用时回退到用户数据目录下的 tools。"""
     d = _load_appinfo().get("tools") or ""
     if not d:
-        d = os.path.join(os.getcwd(), "tools")
+        d = os.path.join(DATA_DIR, "tools")
     try:
         os.makedirs(d, exist_ok=True)
     except OSError:
-        d = os.path.join(os.getcwd(), "tools")
+        d = os.path.join(DATA_DIR, "tools")
         os.makedirs(d, exist_ok=True)
     return d
 
 def _download_dir():
-    """下载目录；路径不可用时回退到程序目录下的 download，避免保存结果直接失败。"""
+    """下载目录；路径不可用时回退到用户数据目录下的 download，避免保存结果直接失败。"""
     d = _load_appinfo().get("download") or ""
     if not d:
-        d = os.path.join(os.getcwd(), "download")
+        d = os.path.join(DATA_DIR, "download")
     try:
         os.makedirs(d, exist_ok=True)
     except OSError:
-        d = os.path.join(os.getcwd(), "download")
+        d = os.path.join(DATA_DIR, "download")
         os.makedirs(d, exist_ok=True)
     return d
 
@@ -92,16 +104,19 @@ def _pick_download_dir_on_windows(start_hint):
         "$d = New-Object System.Windows.Forms.FolderBrowserDialog; "
         "$d.Description = 'Select download directory'; "
         "$d.ShowNewFolderButton = $true; "
-        + (f"$d.SelectedPath = '{start_hint}'; " if start_hint else "") +
+        "$startHint = [Environment]::GetEnvironmentVariable('RH_DOWNLOAD_START'); "
+        "if ($startHint) { $d.SelectedPath = $startHint }; "
         "$r = $d.ShowDialog($owner); "
         "if ($r -eq 'OK') { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Write-Output $d.SelectedPath }; "
         "$owner.Close(); $owner.Dispose()"
     )
     try:
+        env = os.environ.copy()
+        env["RH_DOWNLOAD_START"] = start_hint or ""
         result = subprocess.run(
             ["powershell", "-NoProfile", "-STA", "-Command", script],
             capture_output=True, text=True, timeout=120,
-            encoding="utf-8", errors="replace",
+            encoding="utf-8", errors="replace", env=env,
         )
         path = result.stdout.strip()
         return path
@@ -190,24 +205,98 @@ def _open_external_url(url):
             activate(hwnd)
             return
 
+# 服务端自动下载只接受预期业务域名和常见云存储域名；其它结果仍可由浏览器直接下载。
+_DOWNLOAD_HOST_SUFFIXES = ("runninghub.cn", "runninghub.ai", "aliyuncs.com", "myqcloud.com")
+
+
+def _validate_download_url(url):
+    """只允许 HTTPS 公网目标，阻断环回、内网、链路本地和保留地址。"""
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").rstrip(".").lower()
+    if parsed.scheme != "https" or not host or parsed.username or parsed.password:
+        raise ValueError("only HTTPS download URLs without credentials are allowed")
+    if parsed.port not in (None, 443):
+        raise ValueError("only the default HTTPS port is allowed")
+    if not any(host == suffix or host.endswith("." + suffix) for suffix in _DOWNLOAD_HOST_SUFFIXES):
+        raise ValueError("download host is not allowed")
+    try:
+        addresses = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+    except OSError as e:
+        raise ValueError("download host resolution failed") from e
+    if not addresses:
+        raise ValueError("download host resolution failed")
+    for addr in addresses:
+        ip = ipaddress.ip_address(addr[4][0])
+        if not ip.is_global:
+            raise ValueError("download target must be a public address")
+    return url
+
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """结果下载不跟随重定向，避免重定向到内网或未校验主机。"""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
+    def _check_host(self):
+        """Host 白名单同时阻止 DNS rebinding 读取令牌和静态资源。"""
+        host = (self.headers.get("Host") or "").strip().lower()
+        allowed = {"127.0.0.1:%d" % self.server.server_port, "localhost:%d" % self.server.server_port}
+        if host in allowed:
+            return True
+        self._send_json(403, {"ok": False, "error": "invalid local host"})
+        return False
+
+    def _check_local_action(self):
+        """写操作和系统副作用操作必须来自本应用，并持有本次启动令牌。"""
+        origin = (self.headers.get("Origin") or "").strip()
+        if origin:
+            allowed = {"http://127.0.0.1:%d" % self.server.server_port,
+                       "http://localhost:%d" % self.server.server_port}
+            if origin not in allowed:
+                self._send_json(403, {"ok": False, "error": "cross-site local action denied"})
+                return False
+        supplied = self.headers.get(LOCAL_TOKEN_HEADER) or ""
+        if not hmac.compare_digest(supplied, ACCESS_TOKEN):
+            self._send_json(403, {"ok": False, "error": "valid local token required"})
+            return False
+        return True
+
     def end_headers(self):
         self.send_header("Cache-Control", "no-store, must-revalidate")
         self.send_header("Expires", "0")
         super().end_headers()
 
     def do_GET(self):
+        if not self._check_host():
+            return
         parsed = urlparse(self.path)
         if parsed.path == "/appinfo":
             self._handle_appinfo()
         elif parsed.path == "/open-dir":
-            self._handle_open_dir(parse_qs(parsed.query))
+            if self._check_local_action():
+                self._handle_open_dir(parse_qs(parsed.query))
         elif parsed.path == "/pick-download-dir":
-            self._handle_pick_download_dir(parse_qs(parsed.query))
+            if self._check_local_action():
+                self._handle_pick_download_dir(parse_qs(parsed.query))
+        elif parsed.path == "/tools" or parsed.path.startswith("/tools/"):
+            self._handle_tools_static(parsed)
         else:
             super().do_GET()
 
+    def do_HEAD(self):
+        if not self._check_host():
+            return
+        parsed = urlparse(self.path)
+        if parsed.path == "/tools" or parsed.path.startswith("/tools/"):
+            self._handle_tools_static(parsed, head_only=True)
+        else:
+            super().do_HEAD()
+
     def do_POST(self):
+        if not self._check_host() or not self._check_local_action():
+            return
         parsed = urlparse(self.path)
         if parsed.path == "/save-cover":
             self._handle_save_cover(parse_qs(parsed.query))
@@ -247,6 +336,60 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return json.loads(raw.decode("utf-8")) if raw else {}
         except Exception:
             return None
+
+    def _handle_tools_static(self, parsed, head_only=False):
+        """从用户 tools 目录提供配置和封面，不再依赖安装目录中的静态 tools。"""
+        if parsed.path == "/tools":
+            self.send_response(301)
+            self.send_header("Location", "/tools/")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        d = _tools_dir()
+        if parsed.path == "/tools/":
+            try:
+                names = sorted(
+                    fn for fn in os.listdir(d)
+                    if fn.lower().endswith((".rhtool.json", ".png", ".jpg", ".jpeg"))
+                    and os.path.isfile(os.path.join(d, fn))
+                )
+            except OSError:
+                self.send_error(404, "Tools directory unavailable")
+                return
+            items = "".join(
+                '<li><a href="%s">%s</a></li>' % (html.escape(quote(fn), quote=True), html.escape(fn))
+                for fn in names
+            )
+            body = ("<!DOCTYPE html><html><body><ul>" + items + "</ul></body></html>").encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            if not head_only:
+                self.wfile.write(body)
+            return
+
+        name = unquote(parsed.path[len("/tools/"):])
+        if (not name or name != _safe_filename(name, "") or "/" in name or "\\" in name
+                or not name.lower().endswith((".rhtool.json", ".png", ".jpg", ".jpeg"))):
+            self.send_error(404, "File not found")
+            return
+        path = os.path.join(d, name)
+        if not os.path.isfile(path):
+            self.send_error(404, "File not found")
+            return
+        try:
+            with open(path, "rb") as f:
+                data = f.read()
+        except OSError:
+            self.send_error(404, "File not found")
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", self.guess_type(path))
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        if not head_only:
+            self.wfile.write(data)
 
     def _handle_save_cover(self, qs):
         """保存封面：body 为图片二进制，name 为基名，按 PNG 魔数决定扩展名。"""
@@ -391,14 +534,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._send_json(400, {"ok": False, "error": "invalid json"})
             return
         url = (obj.get("url") or "").strip()
-        if not (url.startswith("http://") or url.startswith("https://")):
-            self._send_json(400, {"ok": False, "error": "url must be http(s)"})
+        try:
+            _validate_download_url(url)
+        except ValueError as e:
+            self._send_json(403, {"ok": False, "error": str(e)})
             return
         fname = _safe_filename(obj.get("filename"), "result.bin")
         path = os.path.join(_download_dir(), fname)
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=120) as r:
+            opener = urllib.request.build_opener(_NoRedirectHandler)
+            with opener.open(req, timeout=120) as r:
                 data = r.read()
             with open(path, "wb") as f:
                 f.write(data)
@@ -409,6 +555,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def _handle_appinfo(self):
         info = _load_appinfo()
         info["session"] = SESSION_ID
+        info["token"] = ACCESS_TOKEN
         body = json.dumps(info, ensure_ascii=False).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")

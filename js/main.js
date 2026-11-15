@@ -9,6 +9,7 @@ import { appPanel, refreshKeyBtn } from "./ui/panels.js";
 import { scanToolsDir, loadToolsFromDir, toolsDirGranted, resetToolsCache } from "./tools.js";
 import { runActiveTool, cancelCurrentRun, restoreResultsSession } from "./runner.js";
 import { showStatus } from "./ui/form.js";
+import { localFetch, setLocalToken } from "./api.js";
 
 let batDownloadDir = "";  // appinfo.txt 第二行：真实磁盘路径（唯一真相，server/资源管理器用）
 let serverMode = false;   // 是否通过启动工具.bat（有 server）启动
@@ -21,6 +22,7 @@ async function fetchAppinfo() {
     const r = await fetch("/appinfo");
     if (r.ok) {
       const j = await r.json();
+      setLocalToken(j.token);
       return { tools: j.tools || "", download: j.download || "", session: j.session || "" };
     }
   } catch (e) { /* 非 server 模式，继续尝试静态文件 */ }
@@ -57,6 +59,7 @@ async function grantDownloadDir() {
   if (!serverMode && location.protocol.startsWith("http")) {
     try {
       const info = await (await fetch("/appinfo")).json();
+      setLocalToken(info && info.token);
       if (info && (info.tools || info.download)) {
         serverMode = true;
         if (info.download) batDownloadDir = info.download;
@@ -68,7 +71,7 @@ async function grantDownloadDir() {
   if (serverMode) {
     dlHint("正在等待你在系统窗口中选择目录…（若没看到窗口，请检查任务栏）");
     let j = null;
-    try { j = await (await fetch("/pick-download-dir")).json(); }
+    try { j = await (await localFetch("/pick-download-dir")).json(); }
     catch (e) { /* 旧版服务没有该接口，走下面的浏览器授权 */ }
 
     if (j && j.cancelled) {
@@ -163,7 +166,7 @@ function initOpenDirButton() {
   btn.onclick = async () => {
     if (!batDownloadDir) { showStatus("尚未配置下载目录，请先点击顶栏「初始设置」完成授权", "err"); return; }
     try {
-      const r = await fetch("/open-dir?path=" + encodeURIComponent(batDownloadDir));
+      const r = await localFetch("/open-dir?path=" + encodeURIComponent(batDownloadDir));
       const j = await r.json();
       if (j.ok) showStatus("📂 已打开资源管理器：" + batDownloadDir, "ok");
       else showStatus("打开失败：" + (j.error || "未知错误"), "err");
@@ -221,7 +224,7 @@ function initQuitButton() {
     btn.disabled = true;
     btn.textContent = "正在退出…";
     try {
-      const r = await fetch("/shutdown", { method: "POST" });
+      const r = await localFetch("/shutdown", { method: "POST" });
       if (!r.ok) throw new Error("shutdown failed");
     } catch (e) {
       btn.disabled = false;
@@ -242,7 +245,7 @@ function initExternalLinks() {
     if (!/^https?:\/\//i.test(href)) return;
     if (a.origin === location.origin) return;
     e.preventDefault();
-    fetch("/open-url?u=" + encodeURIComponent(a.href), { method: "POST" }).catch(() => {});
+    localFetch("/open-url?u=" + encodeURIComponent(a.href), { method: "POST" }).catch(() => {});
   }, true);
 }
 
