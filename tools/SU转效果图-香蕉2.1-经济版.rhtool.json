@@ -4,10 +4,13 @@
   "name": "SU转效果图-香蕉2.1-经济版",
   "icon": "🏗️",
   "desc": "上传效果图/草图，按提示词转绘为写实风格渲染图；输出图比例需与输入图比例同步以保证像素对齐",
+  "sourceUrl": "https://www.runninghub.cn/ai-detail/2120239330638782465",
   "toolType": "app",
   "webappId": "2120239330638782465",
   "instanceType": "default",
-  "category": "效果图转绘",
+  "tags": [
+    "效果图转绘"
+  ],
   "fields": [
     {
       "label": "上传参考图",

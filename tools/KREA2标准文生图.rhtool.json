@@ -1,0 +1,37 @@
+{
+  "type": "runninghub-tool-config",
+  "version": 1,
+  "name": "KREA2标准文生图",
+  "icon": "🏞️",
+  "desc": "输入提示词生成 KREA2 写实意向图；可调整出图比例和出图尺寸",
+  "sourceUrl": "",
+  "toolType": "app",
+  "webappId": "2122034501407830017",
+  "instanceType": "default",
+  "tags": [
+    "文生图"
+  ],
+  "fields": [
+    {
+      "label": "提示词",
+      "type": "textarea",
+      "nodeId": "658",
+      "fieldName": "text",
+      "def": ""
+    },
+    {
+      "label": "出图比例",
+      "type": "select",
+      "nodeId": "74",
+      "fieldName": "aspect_ratio",
+      "def": "3:4 (Portrait Standard),1:1 (Square),2:3 (Portrait Photo),3:2 (Photo),4:3 (Standard),9:16 (Portrait Widescreen),16:9 (Widescreen),21:9 (Ultrawide)"
+    },
+    {
+      "label": "出图尺寸（1=1K，2=2K）",
+      "type": "number",
+      "nodeId": "74",
+      "fieldName": "megapixels",
+      "def": "1"
+    }
+  ]
+}

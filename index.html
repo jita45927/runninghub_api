@@ -56,6 +56,11 @@
 <div class="topbar">
   <div class="logo"><img class="logo-badge" src="ICO/RAPI.ico" alt="RunningHub">RunningHub AI设计师工具箱</div>
   <div style="display:flex;gap:10px">
+    <div class="top-search">
+      <span class="top-search-icon">🔍</span>
+      <input type="search" id="toolSearch" placeholder="搜索工具名称…" autocomplete="off" title="按工具名称关键词搜索首页工具">
+      <button type="button" class="top-search-clear" id="toolSearchClear" style="display:none" title="清除搜索">✕</button>
+    </div>
     <button class="key-btn" id="homeBtn">🏠 工具首页</button>
     <button class="key-btn" id="setupBtn">🧭 初始设置</button>
     <button class="key-btn ghost" id="openDirBtn" style="display:none">🔍 打开下载目录</button>

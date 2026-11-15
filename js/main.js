@@ -2,7 +2,7 @@
 import { state, idbGet, idbSet } from "./store.js";
 import { renderToolList } from "./ui/toollist.js";
 import { renderWorkspace } from "./ui/form.js";
-import { renderHome, showHomeView, showWorkView } from "./ui/home.js";
+import { renderHome, showHomeView, showWorkView, setToolSearch } from "./ui/home.js";
 import { initLightbox } from "./ui/lightbox.js";
 import { initModals, initSetupWizard } from "./ui/modal.js";
 import { appPanel, refreshKeyBtn } from "./ui/panels.js";
@@ -249,6 +249,21 @@ document.getElementById("cancelBtn").onclick = cancelCurrentRun;
 
 // 首页入口；点击左侧工具条目后自动进入工作页（分类头的展开/收起不触发）
 document.getElementById("homeBtn").onclick = () => showHomeView();
+// 顶栏搜索：按工具名称关键词过滤首页工具（Esc 或 ✕ 清除）
+(function initToolSearch() {
+  const input = document.getElementById("toolSearch");
+  const clearBtn = document.getElementById("toolSearchClear");
+  if (!input || !clearBtn) return;
+  const sync = () => {
+    clearBtn.style.display = input.value ? "" : "none";
+    setToolSearch(input.value);
+  };
+  input.addEventListener("input", sync);
+  input.addEventListener("keydown", e => {
+    if (e.key === "Escape") { input.value = ""; sync(); input.blur(); }
+  });
+  clearBtn.onclick = () => { input.value = ""; sync(); input.focus(); };
+})();
 document.getElementById("toolList").addEventListener("click", e => {
   if (e.target.closest(".tool-item")) showWorkView();
 });

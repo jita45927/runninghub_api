@@ -4,10 +4,13 @@
   "name": "KLEIN-SU转绘效果图",
   "icon": "🏙️",
   "desc": "上传SU草图，生成写实风格效果图",
+  "sourceUrl": "https://www.runninghub.cn/ai-detail/2119272366319685634",
   "toolType": "app",
   "webappId": "2119272366319685634",
   "instanceType": "default",
-  "category": "效果图转绘",
+  "tags": [
+    "效果图转绘"
+  ],
   "fields": [
     {
       "label": "上传SU草图",

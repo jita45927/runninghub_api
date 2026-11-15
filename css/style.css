@@ -39,6 +39,26 @@ body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: va
 .key-btn.ghost:hover { color: var(--text); border-color: var(--accent); }
 .key-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
 .key-dot.ok { background: var(--green); }
+/* 顶栏工具搜索：位于「工具首页」按钮左侧 */
+.top-search { position: relative; display: flex; align-items: center; }
+.top-search-icon {
+  position: absolute; left: 10px; font-size: 12px; color: var(--muted);
+  pointer-events: none; line-height: 1;
+}
+.top-search input {
+  width: 190px; height: 34px; padding: 0 30px 0 30px; border-radius: 8px;
+  background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+  font-size: 13px; outline: none; transition: border-color .15s, width .15s;
+}
+.top-search input:focus { border-color: var(--accent); width: 230px; }
+.top-search input::-webkit-search-cancel-button { display: none; }
+.top-search-clear {
+  position: absolute; right: 6px; width: 20px; height: 20px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: none; color: var(--muted);
+  font-size: 11px; cursor: pointer; padding: 0;
+}
+.top-search-clear:hover { color: var(--text); background: #5b8cff26; }
 
 /* ===== 主体布局 ===== */
 .layout { flex: 1; display: flex; overflow: hidden; }

@@ -1,0 +1,51 @@
+{
+  "type": "runninghub-tool-config",
+  "version": 1,
+  "name": "KREA2意向图生成-根据图片",
+  "icon": "🏞️",
+  "desc": "上传参考图，按用户指令生成 KREA2 写实意向图；可调整出图比例、分辨率和随机种子",
+  "sourceUrl": "https://www.runninghub.cn/post/2121201215919972354",
+  "toolType": "workflow",
+  "webappId": "2121201215919972354",
+  "instanceType": "default",
+  "tags": [
+    "文生图"
+  ],
+  "fields": [
+    {
+      "label": "上传参考图",
+      "type": "image",
+      "nodeId": "643",
+      "fieldName": "image",
+      "def": ""
+    },
+    {
+      "label": "用户指令",
+      "type": "textarea",
+      "nodeId": "658",
+      "fieldName": "text",
+      "def": "写实照片，增加人，慢门摄影，行人，增强商业氛围"
+    },
+    {
+      "label": "出图比例",
+      "type": "select",
+      "nodeId": "74",
+      "fieldName": "aspect_ratio",
+      "def": "16:9 (Widescreen),1:1 (Square),2:3 (Portrait Photo),3:2 (Photo),3:4 (Portrait Standard),4:3 (Standard),9:16 (Portrait Widescreen),21:9 (Ultrawide)"
+    },
+    {
+      "label": "出图分辨率（百万像素）",
+      "type": "number",
+      "nodeId": "74",
+      "fieldName": "megapixels",
+      "def": "2"
+    },
+    {
+      "label": "随机种子",
+      "type": "number",
+      "nodeId": "2",
+      "fieldName": "seed",
+      "def": "1047999148699382"
+    }
+  ]
+}

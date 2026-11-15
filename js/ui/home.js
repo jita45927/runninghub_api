@@ -5,6 +5,7 @@ import { trashTool, sortCatNames } from "./toollist.js";
 
 let rerender = null;          // 入口传入的 renderAll，用于卡片点击后刷新全页
 let currentView = "home";     // "home" | "work"
+let searchKeyword = "";       // 首页搜索关键词：按工具名称过滤
 
 // 工具所属分组：与左侧列表一致，一个工具可打多个标签、在多个分组出现
 function groupsOf(t) {
@@ -173,6 +174,23 @@ export function renderHome(renderAll) {
     return;
   }
 
+  // 搜索：按工具名称关键词过滤，没有命中的分组整体隐藏，命中分组始终展开
+  const kw = searchKeyword.toLowerCase();
+  if (kw) {
+    const hit = t => (t.name || "").toLowerCase().includes(kw);
+    groups.forEach((list, cat) => {
+      const matched = list.filter(hit);
+      if (matched.length) groups.set(cat, matched); else groups.delete(cat);
+    });
+    if (!groups.size) {
+      const empty = document.createElement("div");
+      empty.className = "home-empty";
+      empty.textContent = "没有找到名称包含「" + searchKeyword + "」的工具";
+      grid.appendChild(empty);
+      return;
+    }
+  }
+
   // 与左侧工具栏共用同一套排序规则（拖动分组后的自定义顺序）
   const catNames = sortCatNames([...groups.keys()]);
 
@@ -181,7 +199,7 @@ export function renderHome(renderAll) {
     const section = document.createElement("div");
     section.className = "home-section";
 
-    const collapsed = state.collapsedCats.includes(cat);  // 与左侧栏共用收起状态
+    const collapsed = kw ? false : state.collapsedCats.includes(cat);  // 与左侧栏共用收起状态
     const head = document.createElement("div");
     head.className = "home-cat";
     head.title = collapsed ? "展开分组" : "收起分组";
@@ -220,6 +238,16 @@ function applyView() {
   if (home) home.style.display = currentView === "home" ? "" : "none";
   if (ws) ws.style.display = currentView === "work" ? "" : "none";
   if (btn) btn.classList.toggle("active", currentView === "home");
+}
+
+// 顶栏搜索：按工具名称关键词过滤首页工具；有关键词时自动切到首页
+export function setToolSearch(kw) {
+  searchKeyword = (kw || "").trim();
+  if (searchKeyword) {
+    currentView = "home";
+    applyView();
+  }
+  renderHome();
 }
 
 // 进入首页：刷新封面索引后再绘制，避免首次启动读到空索引
