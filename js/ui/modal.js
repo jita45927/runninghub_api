@@ -3,7 +3,7 @@
 // 应用专属设置与配置面板通过 initModals 的 panel 参数接入（见各应用 js/ui/panels.js）。
 import { FIELD_TYPES, ICON_OPTIONS, esc } from "../config.js";
 import { state, saveTools, saveActiveId, tagsOf } from "../store.js";
-import { importToolFile, toolsDirGranted, writeToolToDir, deleteToolFromDir } from "../tools.js";
+import { importToolFile, toolsDirGranted, persistTool, removeToolFile } from "../tools.js";
 import { showStatus } from "./form.js";
 
 let editingToolId = null;
@@ -143,38 +143,78 @@ function setStepState(stepEl, statusEl, ok, dirName, isNext) {
 // 刷新向导中两项授权状态，并高亮引导到下一个待授权项
 let toolsPathHintCache = null;  // bat 启动时写入的 tools 目录绝对路径（appinfo.txt 第一行）
 async function refreshSetupWizard() {
-  const supported = !!window.showDirectoryPicker;
-  const toolsOk = await toolsDirGranted();
-  // 未授权时显示目标路径指引（由启动 bat 写入 appinfo.txt，仅在服务器模式下可用）
-  const hint = document.getElementById("toolsDirPathHint");
-  if (hint && !toolsOk) {
-    if (toolsPathHintCache === null) {
-      try {
-        const r = await fetch("appinfo.txt");
-        if (r.ok) {
-          const lines = (await r.text()).split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-          toolsPathHintCache = lines[0] || "";  // 取第一行为 tools 路径，兼容新的两行格式
-        } else { toolsPathHintCache = ""; }
-      } catch (e) { toolsPathHintCache = ""; }
-    }
-    hint.textContent = toolsPathHintCache ? "📂 " + toolsPathHintCache : "";
-  } else if (hint) hint.textContent = "";
-  const dlOk = await dirGranted(state.dirHandle);
+  // 本地服务模式：tools 写入、结果保存都由 server 直接完成，浏览器不需要任何目录授权
+  let info = null;
+  if (location.protocol.startsWith("http")) {
+    try { info = await (await fetch("/appinfo")).json(); } catch (e) { info = null; }
+  }
+  const serverMode = !!(info && (info.tools || info.download));
+
   const toolsBtn = document.getElementById("grantToolsDirBtn");
   const dlBtn = document.getElementById("grantDownloadDirBtn");
-  if (!supported) {
-    // 浏览器不支持 File System Access：禁用授权按钮
+  const toolsStatus = document.getElementById("setupToolsDirStatus");
+  const dlStatus = document.getElementById("setupDownloadDirStatus");
+  const toolsStep = document.getElementById("setupStepToolsDir");
+  const dlStep = document.getElementById("setupStepDownloadDir");
+  const hint = document.getElementById("toolsDirPathHint");
+  const dlHintEl = document.getElementById("dlAuthHint");
+
+  const toolsOk = serverMode ? true : await toolsDirGranted();
+  const dlOk = serverMode ? !!(info && info.download) : await dirGranted(state.dirHandle);
+
+  // 非服务模式且浏览器不支持：只能提示换浏览器
+  if (!serverMode && !window.showDirectoryPicker) {
     toolsBtn.disabled = dlBtn.disabled = true;
-    document.getElementById("setupToolsDirStatus").textContent = "浏览器不支持";
-    document.getElementById("setupDownloadDirStatus").textContent = "浏览器不支持";
+    toolsStatus.textContent = "浏览器不支持";
+    dlStatus.textContent = "浏览器不支持";
     document.getElementById("setupDone").style.display = "none";
     return;
   }
+  toolsBtn.disabled = dlBtn.disabled = false;
+
   const next = !toolsOk ? "tools" : (!dlOk ? "dl" : null);
-  setStepState(document.getElementById("setupStepToolsDir"), document.getElementById("setupToolsDirStatus"),
-    toolsOk, state.toolsDirHandle && state.toolsDirHandle.name, next === "tools");
-  setStepState(document.getElementById("setupStepDownloadDir"), document.getElementById("setupDownloadDirStatus"),
-    dlOk, state.dirHandle && state.dirHandle.name, next === "dl");
+
+  if (toolsOk) {
+    toolsStep.classList.remove("next");
+    toolsStatus.className = "setup-step-status ok";
+    toolsStatus.textContent = serverMode
+      ? "✅ 本地服务自动写入"
+      : "✅ 已授权" + (state.toolsDirHandle ? "（" + state.toolsDirHandle.name + "）" : "");
+  } else {
+    setStepState(toolsStep, toolsStatus, false, "", next === "tools");
+  }
+  toolsBtn.style.display = serverMode ? "none" : "";
+
+  if (hint) {
+    if (serverMode) {
+      hint.textContent = info.tools ? "📂 " + info.tools : "";
+    } else if (toolsOk) {
+      hint.textContent = "";
+    } else {
+      if (toolsPathHintCache === null) {
+        try {
+          const r = await fetch("appinfo.txt");
+          if (r.ok) {
+            const lines = (await r.text()).split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+            toolsPathHintCache = lines[0] || "";
+          } else { toolsPathHintCache = ""; }
+        } catch (e) { toolsPathHintCache = ""; }
+      }
+      hint.textContent = toolsPathHintCache ? "📂 " + toolsPathHintCache : "";
+    }
+  }
+
+  if (dlOk) {
+    dlStep.classList.remove("next");
+    dlStatus.className = "setup-step-status ok";
+    dlStatus.textContent = serverMode ? "✅ 已配置" : "✅ 已授权" + (state.dirHandle ? "（" + state.dirHandle.name + "）" : "");
+    dlBtn.textContent = "更换目录";
+    if (dlHintEl && serverMode) dlHintEl.textContent = info.download ? "📂 " + info.download : "";
+  } else {
+    setStepState(dlStep, dlStatus, false, "", next === "dl");
+    dlBtn.textContent = "选择目录";
+  }
+
   document.getElementById("setupDone").style.display = toolsOk && dlOk ? "" : "none";
 }
 
@@ -292,32 +332,25 @@ export function initModals(renderAll, panel) {
       try { appPanel.afterToolSave(savedTool, prevName); }
       catch (e) { /* 钩子异常不影响工具保存 */ }
     }
-    // 已授权配置目录时，把工具 JSON 写回目录文件（改名时删除旧文件）
-    if (await toolsDirGranted()) {
-      try {
-        const fn = await writeToolToDir(state.tools.find(x => x.id === (editingToolId || data.id)));
-        showStatus("已保存到 tools/" + fn, "success");
-      } catch (err) { showStatus("写入配置目录失败：" + err.message, "error"); }
-    }
+    // 写回 tools 目录：本地服务模式下由 server 直接写文件，无需浏览器授权
+    try {
+      const saved = state.tools.find(x => x.id === (editingToolId || data.id));
+      const fn = await persistTool(saved);
+      if (fn) showStatus("已保存到 tools/" + fn, "success");
+    } catch (err) { showStatus("写入配置目录失败：" + err.message, "error"); }
   };
   document.getElementById("deleteToolBtn").onclick = async () => {
     if (!editingToolId) return;
-    const inDir = await toolsDirGranted();
-    const msg = inDir
-      ? "确定删除这个工具吗？\n将同时删除 tools 目录中的配置文件。"
-      : "确定删除这个工具吗？\n当前未授权配置目录；如果 tools/ 目录里有同名配置文件，刷新后可能重新出现。";
-    if (!confirm(msg)) return;
+    if (!confirm("确定删除这个工具吗？\n将同时删除 tools 目录中的同名配置文件。")) return;
     const delId = editingToolId;
+    const delTool = state.tools.find(x => x.id === delId);
     state.tools = state.tools.filter(x => x.id !== delId);
     if (state.activeId === delId) state.activeId = state.tools[0] && state.tools[0].id;
     saveTools();
     saveActiveId();
     toolModal.classList.remove("show");
     renderAll();
-    if (inDir) {
-      try { await deleteToolFromDir(delId); showStatus("已删除 tools 目录中的配置文件", "success"); }
-      catch (err) { showStatus("删除配置文件失败：" + err.message, "error"); }
-    }
+    try { await removeToolFile(delTool); } catch (err) { /* 配置文件可能本来就不存在 */ }
   };
 
   // 弹窗通用关闭

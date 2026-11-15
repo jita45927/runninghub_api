@@ -8,6 +8,36 @@
 </head>
 <body>
 
+<!-- 启动/脚本错误提示：直接双击 index.html 打开，或脚本加载失败时给出可见原因 -->
+<div id="bootWarn" style="display:none;position:fixed;top:0;left:0;right:0;z-index:99999;background:#7a1f28;color:#fff;font:13px/1.7 'Microsoft YaHei',sans-serif;padding:10px 16px;border-bottom:2px solid #ff7a7a"></div>
+<script>
+(function () {
+  function show(html) {
+    var el = document.getElementById("bootWarn");
+    if (!el) return;
+    el.style.display = "block";
+    el.innerHTML += (el.innerHTML ? "<br>" : "") + html;
+  }
+  if (location.protocol === "file:") {
+    show("⚠️ 当前是直接双击 index.html 打开的。浏览器会拦截程序脚本，所以按钮点击没有反应。<br>正确用法：先安装 Python 3，再双击同目录的「启动工具.bat」，在自动打开的 http://127.0.0.1:8900/ 页面里使用。");
+  }
+  window.addEventListener("error", function (e) {
+    if (e.target && e.target.tagName === "SCRIPT") {
+      show("⚠️ 脚本加载失败：" + (e.target.src || "未知文件") + "<br>请确认 js 文件夹完整，并用「启动工具.bat」启动。");
+      return;
+    }
+    if (!e.message && !e.filename) return;  // 模块加载失败的附带空事件，已有上面那条提示
+    show("⚠️ 页面脚本出错：" + (e.message || "未知错误") +
+      (e.filename ? "（" + e.filename + (e.lineno ? ":" + e.lineno : "") + "）" : "") +
+      "<br>请按 F12 打开控制台，把红色报错发给开发者。");
+  }, true);
+  window.addEventListener("unhandledrejection", function (e) {
+    var r = e.reason;
+    show("⚠️ 页面脚本出错：" + (r && r.message ? r.message : String(r)));
+  });
+})();
+</script>
+
 <!-- 推广条 -->
 <div class="promo-bar">
   <span>本工具调用 RunningHub-API · 宝藏 AIGC 平台 RunningHub，注册可赠送积分，AI 助力创意无边界，快来和我一起创作吧！</span>
@@ -27,7 +57,6 @@
   <div style="display:flex;gap:10px">
     <button class="key-btn" id="homeBtn">🏠 工具首页</button>
     <button class="key-btn" id="setupBtn">🧭 初始设置</button>
-    <button class="key-btn" id="dirBtn">📁 <span id="dirBtnText">下载目录：默认</span></button>
     <button class="key-btn ghost" id="openDirBtn" style="display:none">🔍 打开下载目录</button>
     <button class="key-btn" id="keyBtn"><span class="key-dot" id="keyDot"></span><span id="keyBtnText">API Key 未设置</span></button>
   </div>
@@ -41,7 +70,6 @@
     <div class="add-tool" id="addToolBtn">＋ 添加工具</div>
     <div class="add-tool" id="importToolBtn" style="margin-top:0">📥 导入配置文件</div>
     <div class="add-tool" id="resetToolsBtn" style="margin-top:6px">🔄 重置工具缓存</div>
-    <div class="add-tool" id="toolsDirBtn" style="margin-top:0">🗂 配置目录：未授权</div>
     <div class="sidebar-foot"><a id="disclaimerBtn">⚠️ 免责声明</a></div>
     <input type="file" id="importFileInput" accept=".json" style="display:none">
   </div>
@@ -356,26 +384,30 @@
 <div class="modal-mask" id="setupModal">
   <div class="modal" style="width:560px">
     <h3>🧭 初始设置</h3>
-    <div class="modal-sub">完成下面两项授权，工具配置和生成结果都会直接写入你的本地目录（两项需分别点击授权）</div>
+    <div class="modal-sub">通过「启动工具.bat」运行时，工具配置由本地服务直接写入 tools 目录，无需授权；下载目录只需选择一次。</div>
     <div class="setup-step" id="setupStepToolsDir">
       <div class="setup-step-num">1</div>
       <div class="setup-step-body">
         <div class="setup-step-name">工具配置目录</div>
-        <div class="setup-step-desc">配置直接写入该目录的 json 文件。请在弹出的窗口中选中本程序目录下的 <b>tools</b> 文件夹：</div>
-        <div class="setup-step-desc" id="toolsDirPathHint" style="color:#8ab4ff;word-break:break-all"></div>
+        <div class="setup-step-desc">工具配置直接写入程序目录下的 <b>tools</b> 文件夹。用「启动工具.bat」启动时由本地服务自动完成，无需点授权。</div>
+        <div class="setup-step-desc" id="toolsDirPathHint" style="color:#8ab4ff;overflow-wrap:anywhere"></div>
       </div>
-      <div class="setup-step-status" id="setupToolsDirStatus">⚠️ 未授权</div>
-      <button class="btn ghost" id="grantToolsDirBtn">去授权</button>
+      <div class="setup-step-actions">
+        <div class="setup-step-status" id="setupToolsDirStatus">⚠️ 未授权</div>
+        <button class="btn ghost" id="grantToolsDirBtn">去授权</button>
+      </div>
     </div>
     <div class="setup-step" id="setupStepDownloadDir">
       <div class="setup-step-num">2</div>
       <div class="setup-step-body">
         <div class="setup-step-name">下载目录</div>
-        <div class="setup-step-desc">生成结果自动保存到这里</div>
-        <div class="setup-step-desc" id="dlAuthHint" style="color:#f0b429;word-break:break-all;white-space:pre-wrap"></div>
+        <div class="setup-step-desc">生成结果自动保存到这里。只需在弹出的系统窗口中选择一次文件夹。</div>
+        <div class="setup-step-desc" id="dlAuthHint" style="color:#f0b429;overflow-wrap:anywhere;white-space:pre-wrap"></div>
       </div>
-      <div class="setup-step-status" id="setupDownloadDirStatus">⚠️ 未授权</div>
-      <button class="btn ghost" id="grantDownloadDirBtn">去授权</button>
+      <div class="setup-step-actions">
+        <div class="setup-step-status" id="setupDownloadDirStatus">⚠️ 未配置</div>
+        <button class="btn ghost" id="grantDownloadDirBtn">选择目录</button>
+      </div>
     </div>
     <div class="setup-done" id="setupDone" style="display:none">🎉 设置完成</div>
     <div class="modal-actions">

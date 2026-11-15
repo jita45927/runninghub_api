@@ -115,31 +115,47 @@ export async function coverPreviewUrl(file) {
   return URL.createObjectURL(blob);
 }
 
-// 保存封面到 tools 目录（需要配置目录授权），返回写入的文件名
+// 保存封面到 tools 目录：优先由本地服务直接写入，未启动服务时才需要目录句柄授权
 export async function saveCover(toolName, file) {
-  if (!(await toolsDirGranted())) throw new Error("请先授权 tools 配置目录（左侧「🗂 配置目录」）再上传封面");
   if (file.type !== "image/png" && file.type !== "image/jpeg") throw new Error("封面仅支持 PNG 或 JPG 图片");
   if (file.size > MAX_COVER_SIZE) throw new Error("封面图片不能超过 8MB");
 
   const { blob, ext } = await getNormalized(file);
-  const dh = state.toolsDirHandle;
   const base = toolBaseName({ name: toolName });
-  // 同名的另一扩展名旧封面会导致索引冲突，先删除
-  for (const oldExt of [".png", ".jpg"]) {
-    if (oldExt === ext) continue;
-    try { await dh.removeEntry(base + oldExt); } catch (e) { /* 旧文件不存在 */ }
+  let savedName = null;
+
+  // 本地服务模式：POST /save-cover，浏览器无需任何文件夹授权
+  if (location.protocol.startsWith("http")) {
+    try {
+      const r = await fetch("/save-cover?name=" + encodeURIComponent(base), { method: "POST", body: blob });
+      if (r.ok) {
+        const j = await r.json();
+        if (j && j.ok && j.file) savedName = j.file;
+      }
+    } catch (e) { /* 旧版服务没有该接口，退回目录句柄 */ }
   }
-  const fh = await dh.getFileHandle(base + ext, { create: true });
-  const w = await fh.createWritable();
-  await w.write(blob);
-  await w.close();
+
+  if (!savedName) {
+    if (!(await toolsDirGranted())) throw new Error("保存封面失败：请用「启动工具.bat」启动新版服务，或在「初始设置」里授权工具配置目录");
+    const dh = state.toolsDirHandle;
+    // 同名的另一扩展名旧封面会导致索引冲突，先删除
+    for (const oldExt of [".png", ".jpg"]) {
+      if (oldExt === ext) continue;
+      try { await dh.removeEntry(base + oldExt); } catch (e) { /* 旧文件不存在 */ }
+    }
+    const fh = await dh.getFileHandle(base + ext, { create: true });
+    const w = await fh.createWritable();
+    await w.write(blob);
+    await w.close();
+    savedName = base + ext;
+  }
 
   const key = base.toLowerCase();
   const prev = coverMap.get(key);
   if (prev && prev.objectUrl) URL.revokeObjectURL(prev.objectUrl);
   const objectUrl = URL.createObjectURL(blob);
-  coverMap.set(key, { name: base + ext, url: objectUrl, objectUrl });
-  return base + ext;
+  coverMap.set(key, { name: savedName, url: objectUrl, objectUrl });
+  return savedName;
 }
 
 // 工具改名时同步重命名封面文件；没有封面时静默返回 null
@@ -149,6 +165,23 @@ export async function renameCover(oldToolName, newToolName) {
   if (!oldBase || oldBase === newBase) return null;
   // Windows 文件系统不区分大小写，仅大小写不同的改名不处理，避免误删同一个文件
   if (oldBase.toLowerCase() === newBase.toLowerCase()) return null;
+
+  // 本地服务模式：由 server 直接重命名文件
+  if (location.protocol.startsWith("http")) {
+    try {
+      const r = await fetch("/rename-cover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ old: oldBase, new: newBase })
+      });
+      if (r.ok) {
+        const j = await r.json();
+        if (j && j.ok) return j.files && j.files.length ? j.files[0] : null;
+        return null;
+      }
+    } catch (e) { /* 旧版服务没有该接口，退回目录句柄 */ }
+  }
+
   if (!(await toolsDirGranted())) return null;
 
   const dh = state.toolsDirHandle;

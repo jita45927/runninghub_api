@@ -1,7 +1,7 @@
 // ================= 左侧工具列表（按分类分组，可展开/收起）【公共核心】 =================
 // 本文件由公共核心同步而来：请修改 runninghub_api/js/ui/toollist.js，再运行「同步核心.ps1」。
 import { state, saveTools, saveActiveId, saveCats, tagsOf } from "../store.js";
-import { toolsDirGranted, deleteToolFromDir } from "../tools.js";
+import { removeToolFile } from "../tools.js";
 import { showStatus } from "./form.js";
 
 // 左侧列表内拖动排序：只允许在同一分组内调整先后
@@ -93,16 +93,18 @@ function buildToolItem(t, renderAll, groupTag) {
   delEl.onclick = async e => {
     e.stopPropagation();
     if (state.currentRun && state.runningToolId === t.id) { alert("该工具正在运行，请先取消任务"); return; }
-    const inDir = await toolsDirGranted();
-    if (!confirm("确定删除「" + (t.name || "未命名") + "」吗？" + (inDir ? "\n将同时删除 tools 目录中的配置文件。" : ""))) return;
+    if (!confirm("确定删除「" + (t.name || "未命名") + "」吗？\n将同时删除 tools 目录中的同名配置文件。")) return;
+    const delTool = t;
     state.tools = state.tools.filter(x => x.id !== t.id);
     if (state.activeId === t.id) state.activeId = state.tools[0] && state.tools[0].id;
     saveTools();
     saveActiveId();
     renderAll();
-    if (inDir) {
-      try { await deleteToolFromDir(t.id); showStatus("已删除 tools 目录中的配置文件", "ok"); }
-      catch (err) { showStatus("删除配置文件失败：" + err.message, "error"); }
+    try {
+      const okDel = await removeToolFile(delTool);
+      showStatus(okDel ? "已删除 tools 目录中的同名配置文件" : "已从列表移除（未找到同名配置文件）", okDel ? "ok" : "error");
+    } catch (err) {
+      showStatus("删除配置文件失败：" + err.message, "error");
     }
   };
   el.onclick = () => {

@@ -279,7 +279,7 @@ label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px
 
 /* 初始设置向导 */
 .setup-step {
-  display: flex; align-items: center; gap: 14px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px 14px;
   background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
   padding: 14px 16px; margin-bottom: 12px; transition: border-color .2s;
 }
@@ -289,9 +289,10 @@ label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px
   display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700;
 }
 .setup-step.next .setup-step-num { background: var(--accent); color: #fff; }
-.setup-step-body { flex: 1; min-width: 0; }
+.setup-step-body { flex: 1 1 240px; min-width: 0; }
 .setup-step-name { font-size: 14px; font-weight: 600; }
 .setup-step-desc { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.setup-step-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; flex-shrink: 0; }
 .setup-step-status { font-size: 12px; color: var(--red); white-space: nowrap; }
 .setup-step-status.ok { color: var(--green); }
 .setup-done { text-align: center; color: var(--green); font-size: 14px; font-weight: 600; margin-top: 6px; }

@@ -43,13 +43,12 @@ export function importToolFile(file, renderAll) {
       saveTools();
       saveActiveId();
       renderAll();
-      // 已授权配置目录时，导入的配置同时写入目录文件
+      // 导入后写回 tools 目录（本地服务模式无需授权）
       const tool = idx >= 0 ? state.tools[idx] : merged;
       (async () => {
-        if (!(await toolsDirGranted())) return;
         try {
-          const fn = await writeToolToDir(tool);
-          showStatus("已导入并保存到 tools/" + fn, "ok");
+          const fn = await persistTool(tool);
+          if (fn) showStatus("已导入并保存到 tools/" + fn, "ok");
         } catch (err) { showStatus("写入配置目录失败：" + err.message, "error"); }
       })();
     } catch (err) {
@@ -181,4 +180,45 @@ export async function deleteToolFromDir(toolId) {
   if (!dh || !name) return;
   try { await dh.removeEntry(name); } catch (e) { /* 文件已不存在 */ }
   delete state.toolFileNames[toolId];
+}
+
+// ===== 统一持久化：本地服务可用时由 server 直接写 tools/，不再需要浏览器目录授权 =====
+export async function persistTool(t) {
+  if (!t) return null;
+  if (location.protocol.startsWith("http")) {
+    try {
+      const r = await fetch("/save-tool", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file: toolFileName(t), content: toolToConfigJSON(t) })
+      });
+      if (r.ok) {
+        const j = await r.json();
+        if (j && j.ok) return j.file;
+      }
+    } catch (e) { /* 旧版服务没有该接口，退回目录句柄 */ }
+  }
+  if (await toolsDirGranted()) return writeToolToDir(t);
+  return null;
+}
+
+// 删除工具配置文件：优先交给本地服务
+export async function removeToolFile(tool) {
+  if (!tool) return false;
+  if (location.protocol.startsWith("http")) {
+    try {
+      const r = await fetch("/delete-tool", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file: toolFileName(tool) })
+      });
+      if (r.ok) return true;
+    } catch (e) { /* 旧版服务没有该接口，退回目录句柄 */ }
+  }
+  if (await toolsDirGranted()) {
+    if (!state.toolFileNames[tool.id]) state.toolFileNames[tool.id] = toolFileName(tool);
+    await deleteToolFromDir(tool.id);
+    return true;
+  }
+  return false;
 }

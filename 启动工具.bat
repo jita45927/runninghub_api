@@ -9,6 +9,7 @@ rem   Line 1 = tools ??????? %CD%\tools?
 rem   Line 2 = ?????????????? FolderBrowserDialog?
 rem ----------------------------------------------------------
 powershell -NoProfile -STA -Command ^
+  "Add-Type -AssemblyName System.Windows.Forms;" ^
   "$tools = '%CD%\tools';" ^
   "$dl = '';" ^
   "if (Test-Path 'appinfo.txt') {" ^

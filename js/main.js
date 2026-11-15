@@ -34,20 +34,12 @@ async function fetchAppinfo() {
 }
 
 // ================= 下载目录（统一入口：server FolderBrowserDialog + 浏览器授权） =================
-function updateDirBtn(extra) {
-  const label = batDownloadDir
-    ? batDownloadDir.replace(/\\/g, "/")
-    : (state.dirHandle ? state.dirHandle.name : "默认");
-  document.getElementById("dirBtnText").textContent = "下载目录：" + label + (extra || "");
-}
-
 /**
- * 完整授权下载目录流程：
- *  1. 调 server /pick-download-dir 弹系统 FolderBrowserDialog → 拿到真实磁盘路径 → 写回 appinfo.txt
- *  2. 浏览器 showDirectoryPicker({ startIn: 该路径 }) 做 File System Access 授权
- *  3. 两者指向同一物理位置，runner.js 用 dirHandle 保存，server 用 batDownloadDir 打开资源管理器
+ * 设置下载目录：
+ *  本地服务模式（启动工具.bat）：只需系统目录框选一次，server 负责把结果文件写进去，浏览器无需授权
+ *  非服务模式（file:// 等）：退回浏览器 showDirectoryPicker 授权
  */
-let pendingDlBrowserAuth = false;  // 系统目录框已选完，等待第二次点击完成浏览器授权
+let dlGranting = false;            // 防止连点：上一次流程还没结束就再次调用，浏览器会判定「缺少用户手势」
 
 // 反馈直接写进初始设置弹窗：底部 statusBar 会被弹窗遮挡，用户看不到就等于「没反应」
 function dlHint(msg) {
@@ -56,48 +48,56 @@ function dlHint(msg) {
 }
 
 async function grantDownloadDir() {
-  if (!window.showDirectoryPicker) {
-    alert("当前浏览器不支持自定义下载目录，请使用 Edge 或 Chrome");
-    return false;
-  }
+  if (dlGranting) return false;  // 连点第二次直接忽略，避免弹出 "Must be handling a user gesture" 报错
   const dlBtn = document.getElementById("grantDownloadDirBtn");
+  dlGranting = true;
+  try {
 
-  // Step 1: 让 server 弹系统目录选择框（拿真实磁盘路径字符串）
-  // 注意：选目录耗时较长，浏览器要求的「用户点击激活」会失效，
-  // 因此选完后必须让用户再点一次按钮，才能调 showDirectoryPicker
-  if (serverMode && !pendingDlBrowserAuth) {
+  // 初始化尚未完成时也可能点到授权：先向服务端确认一次，避免误走浏览器授权流程
+  if (!serverMode && location.protocol.startsWith("http")) {
+    try {
+      const info = await (await fetch("/appinfo")).json();
+      if (info && (info.tools || info.download)) {
+        serverMode = true;
+        if (info.download) batDownloadDir = info.download;
+      }
+    } catch (e) {}
+  }
+
+  // 本地服务模式：选一次目录即可，结果由 server 直接保存，不再弹第二个浏览器窗口
+  if (serverMode) {
     dlHint("正在等待你在系统窗口中选择目录…（若没看到窗口，请检查任务栏）");
     let j = null;
     try { j = await (await fetch("/pick-download-dir")).json(); }
-    catch (e) { /* server 不可用时降级为纯浏览器授权 */ }
+    catch (e) { /* 旧版服务没有该接口，走下面的浏览器授权 */ }
 
     if (j && j.cancelled) {
-      dlHint("已取消目录选择，可再次点击「去授权」重试");
-      showStatus("已取消目录选择", "err");
+      dlHint("已取消目录选择，可再次点击「选择目录」重试");
       return false;
     }
     if (j && j.ok && j.path) {
       batDownloadDir = j.path;
       document.getElementById("openDirBtn").style.display = "";
-      pendingDlBrowserAuth = true;
-      dlBtn.textContent = "② 完成浏览器授权";
-      dlHint("已选择：" + j.path + "\n请再点一次右侧按钮，在随后弹出的窗口中选中同一个文件夹（浏览器安全限制，必须再点一次）");
-      showStatus("已选择下载目录，请再次点击按钮完成浏览器授权", "ok");
-      return false;
+      dlHint("📂 " + j.path);
+      dlBtn.textContent = "更换目录";
+      showStatus("下载目录已设置为 " + j.path + "，生成结果会自动保存到这里", "ok");
+      return true;
     }
-    dlHint("");
   }
 
-  // Step 2: 浏览器 File System Access 授权
+  if (!window.showDirectoryPicker) {
+    dlHint("浏览器不支持目录授权：请使用 Edge/Chrome，并确认是通过「启动工具.bat」启动");
+    return false;
+  }
+
+  // 浏览器 File System Access 授权（file:// 打开时的兜底方案）
   try {
     const pickerOpts = { mode: "readwrite" };
     if (state.dirHandle) pickerOpts.startIn = state.dirHandle;
     else if (state.toolsDirHandle) pickerOpts.startIn = state.toolsDirHandle;
     state.dirHandle = await showDirectoryPicker(pickerOpts);
     await idbSet("dir", state.dirHandle);
-    pendingDlBrowserAuth = false;
-    dlBtn.textContent = "去授权";
-    updateDirBtn();
+    dlBtn.textContent = "更换目录";
     // 两处选择若指向不同文件夹，「打开下载目录」会开错位置，必须提示
     const sysName = (batDownloadDir || "").split(/[\\/]/).filter(Boolean).pop();
     if (sysName && state.dirHandle.name && sysName !== state.dirHandle.name) {
@@ -107,8 +107,19 @@ async function grantDownloadDir() {
     }
     return true;
   } catch (e) {
-    dlHint("浏览器授权未完成：" + (e && e.message ? e.message : "已取消"));
+    const msg = e && e.message ? e.message : "";
+    if (e && e.name === "AbortError") {
+      dlHint("已取消浏览器授权，可再次点击「选择目录」重试");
+    } else if (/user gesture|user activation/i.test(msg)) {
+      dlHint("浏览器没有弹出授权窗口（安全限制），请再点一次右侧按钮");
+    } else {
+      dlHint("浏览器授权未完成：" + (msg || "未知错误"));
+    }
     return false;
+  }
+
+  } finally {
+    dlGranting = false;
   }
 }
 
@@ -118,17 +129,14 @@ async function ensureDownloadDirPerm() {
   try {
     if ((await state.dirHandle.queryPermission({ mode: "readwrite" })) === "granted") return true;
     if ((await state.dirHandle.requestPermission({ mode: "readwrite" })) === "granted") {
-      updateDirBtn();
       return true;
     }
   } catch (e) {}
   return false;
 }
 
-function initDirButton() {
-  const btn = document.getElementById("dirBtn");
-
-  // 页面打开时检测 serverMode，读取 appinfo.txt 第二行作为初始 batDownloadDir
+// 下载目录状态初始化（授权入口已统一到顶栏「初始设置」）
+function initDirState() {
   (async () => {
     const info = await fetchAppinfo();
     if (info) {
@@ -144,25 +152,16 @@ function initDirButton() {
     if (!window.showDirectoryPicker) return;
     try {
       const h = await idbGet("dir");
-      if (!h) { updateDirBtn(); return; }
-      state.dirHandle = h;
-      const perm = await h.queryPermission({ mode: "readwrite" });
-      updateDirBtn(perm === "granted" ? "" : "（点我授权）");
-    } catch (e) { updateDirBtn(); }
+      if (h) state.dirHandle = h;
+    } catch (e) {}
   })();
-
-  btn.onclick = async () => {
-    // 如果已有 handle 且权限 OK，走完整换目录流程（用户主动点 = 想换或确认）
-    // 否则走完整 grantDownloadDir（系统弹 + 浏览器弹）
-    await grantDownloadDir();
-  };
 }
 
 // ================= 打开下载目录（server 侧 /open-dir） =================
 function initOpenDirButton() {
   const btn = document.getElementById("openDirBtn");
   btn.onclick = async () => {
-    if (!batDownloadDir) { showStatus("尚未配置下载目录，请先点击顶栏「下载目录」按钮选择", "err"); return; }
+    if (!batDownloadDir) { showStatus("尚未配置下载目录，请先点击顶栏「初始设置」完成授权", "err"); return; }
     try {
       const r = await fetch("/open-dir?path=" + encodeURIComponent(batDownloadDir));
       const j = await r.json();
@@ -173,11 +172,6 @@ function initOpenDirButton() {
 }
 
 // ================= 配置目录授权（tools/ 作为工具配置唯一数据源） =================
-function updateToolsDirBtn(text) {
-  document.getElementById("toolsDirBtn").textContent = "🗂 配置目录：" +
-    (text || (state.toolsDirHandle ? "已授权（" + state.toolsDirHandle.name + "）" : "未授权"));
-}
-
 async function grantToolsDir() {
   try {
     if (!state.toolsDirHandle) {
@@ -186,28 +180,22 @@ async function grantToolsDir() {
     } else if (!(await toolsDirGranted())) {
       if ((await state.toolsDirHandle.requestPermission({ mode: "readwrite" })) !== "granted") return false;
     }
-    updateToolsDirBtn();
     if (await loadToolsFromDir(renderAll)) showStatus("已从配置目录读取工具列表", "ok");
     return true;
   } catch (e) { return false; }
 }
 
-function initToolsDirButton() {
-  const btn = document.getElementById("toolsDirBtn");
-  if (!window.showDirectoryPicker) { btn.style.display = "none"; scanToolsDir(renderAll); return; }
-
-  btn.onclick = grantToolsDir;
-
+// 配置目录状态初始化（授权入口已统一到顶栏「初始设置」）
+function initToolsDirState() {
+  if (!window.showDirectoryPicker) { scanToolsDir(renderAll); return; }
   (async () => {
     try {
       const h = await idbGet("toolsDir");
-      if (!h) { updateToolsDirBtn(); scanToolsDir(renderAll); return; }
+      if (!h) { scanToolsDir(renderAll); return; }
       state.toolsDirHandle = h;
       if (await toolsDirGranted()) {
-        updateToolsDirBtn();
         if (!(await loadToolsFromDir(renderAll))) scanToolsDir(renderAll);
       } else {
-        updateToolsDirBtn("点我授权（" + h.name + "）");
         scanToolsDir(renderAll);
       }
     } catch (e) { scanToolsDir(renderAll); }
@@ -257,9 +245,9 @@ document.addEventListener("rh:grant-tools-dir", () => { grantToolsDir(); });
 initLightbox();
 initModals(renderAll, appPanel);
 initSetupWizard({ grantToolsDir, grantDownloadDir });
-initDirButton();
+initDirState();
 initOpenDirButton();
-initToolsDirButton();
+initToolsDirState();
 refreshKeyBtn();
 renderAll();
 showHomeView();  // 启动默认进入工具首页

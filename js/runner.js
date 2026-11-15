@@ -4,7 +4,7 @@ import { apiKey, uploadImage, createTask, queryTask, cancelTask, enrichSelectOpt
 import { showStatus, refreshSelectOptions } from "./ui/form.js";
 import { buildResultHtml, bindResultImageDims } from "./ui/results.js";
 import { refreshToolItemStates } from "./ui/toollist.js";
-import { toolsDirGranted, writeToolToDir } from "./tools.js";
+import { persistTool } from "./tools.js";
 
 const RESULTS_STORE_KEY = "rh_results_session";
 let agentSession = "";
@@ -153,14 +153,29 @@ export async function runActiveTool() {
 
     // 自动下载结果原图到本地（避免24小时后链接过期丢失）
     let downloaded = 0;
+    let byServer = 0;
     for (let idx = 0; idx < results.length; idx++) {
       const it = results[idx];
       if (!it.url || !(it.outputType || "").match(/png|jpe?g|webp|gif|mp4|mov/i)) continue;
+      const fname = (tool.name || "result") + "_" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")
+        + (results.length > 1 ? "_" + (idx + 1) : "") + "." + (it.outputType || "png");
+      // 本地服务模式：由 server 直接下载到已配置的下载目录，浏览器无需授权
+      if (location.protocol.startsWith("http")) {
+        try {
+          const r = await fetch("/save-image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: it.url, filename: fname })
+          });
+          if (r.ok) {
+            const j = await r.json();
+            if (j && j.ok) { downloaded++; byServer++; continue; }
+          }
+        } catch (e) { /* 旧版服务没有该接口，走下面的兜底 */ }
+      }
       try {
         const r = await fetch(it.url);
         const b = await r.blob();
-        const fname = (tool.name || "result") + "_" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")
-          + (results.length > 1 ? "_" + (idx + 1) : "") + "." + (it.outputType || "png");
         // 已设置自定义目录：静默写入，不弹任何窗口
         if (state.dirHandle && (await state.dirHandle.queryPermission({ mode: "readwrite" })) === "granted") {
           try { await saveToDir(state.dirHandle, fname, b); downloaded++; continue; } catch (e) {}
@@ -182,7 +197,7 @@ export async function runActiveTool() {
         saveTools();
         if (state.activeId === runToolId) refreshSelectOptions(tool);
         try {
-          if (await toolsDirGranted()) await writeToolToDir(tool);
+          await persistTool(tool);
         } catch (e) { /* 写目录失败时 localStorage 已更新 */ }
         optionTip = "；已自动补全 " + filled + " 个下拉列表的选项";
       }
@@ -190,7 +205,7 @@ export async function runActiveTool() {
 
     // 组装扣费信息
     let costText = "✅ 生成完成！共 " + results.length + " 个输出";
-    if (downloaded) costText += "，已自动下载 " + downloaded + " 个文件到「" + (state.dirHandle ? state.dirHandle.name : "浏览器下载目录") + "」";
+    if (downloaded) costText += "，已自动保存 " + downloaded + " 个文件到「" + (byServer ? "下载目录" : (state.dirHandle ? state.dirHandle.name : "浏览器下载目录")) + "」";
     if (usage && (usage.consumeMoney || usage.consumeCoins || usage.taskCostTime)) {
       const parts = [];
       if (usage.taskCostTime) parts.push("耗时 " + usage.taskCostTime + " 秒");

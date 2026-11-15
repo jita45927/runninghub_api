@@ -33,22 +33,35 @@ async function fetchBalance() {
 
 function initSettings() {
   const keyModal = document.getElementById("keyModal");
-  document.getElementById("keyBtn").onclick = () => {
-    document.getElementById("apiKey").value = localStorage.getItem(LS.key) || "";
-    document.getElementById("site").value = localStorage.getItem(LS.site) || "https://www.runninghub.cn";
+  const keyBtn = document.getElementById("keyBtn");
+  const apiKeyInput = document.getElementById("apiKey");
+  const siteInput = document.getElementById("site");
+  if (!keyBtn || !keyModal || !apiKeyInput || !siteInput) return;  // 页面文件不完整时不绑定，避免点击后静默报错
+  keyBtn.onclick = () => {
+    try {
+      apiKeyInput.value = localStorage.getItem(LS.key) || "";
+      siteInput.value = localStorage.getItem(LS.site) || "https://www.runninghub.cn";
+    } catch (e) {
+      alert("浏览器禁止了本地存储，API Key 无法保存。请关闭无痕模式，或换用 Edge / Chrome 打开。");
+    }
     keyModal.classList.add("show");
     fetchBalance();
   };
   document.getElementById("saveKeyBtn").onclick = () => {
-    const k = document.getElementById("apiKey").value.trim();
-    if (k) localStorage.setItem(LS.key, k);
-    localStorage.setItem(LS.site, document.getElementById("site").value);
+    const k = apiKeyInput.value.trim();
+    try {
+      if (k) localStorage.setItem(LS.key, k);
+      localStorage.setItem(LS.site, siteInput.value);
+    } catch (e) {
+      alert("保存失败：浏览器禁止了本地存储（" + e.message + "）");
+      return;
+    }
     keyModal.classList.remove("show");
     refreshKeyBtn();
   };
   document.getElementById("clearKeyBtn").onclick = () => {
-    localStorage.removeItem(LS.key);
-    document.getElementById("apiKey").value = "";
+    try { localStorage.removeItem(LS.key); } catch (e) {}
+    apiKeyInput.value = "";
     refreshKeyBtn();
     keyModal.classList.remove("show");
   };

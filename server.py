@@ -3,7 +3,7 @@
 #   /appinfo            → 返回 {tools, download, session}，session 每次启动都不同
 #   /open-dir?path=...  → 调起 Windows 资源管理器打开指定目录
 #   /pick-download-dir  → 弹系统 FolderBrowserDialog 让用户选下载目录，写回 appinfo.txt 第二行
-import http.server, os, sys, json, locale, subprocess, shlex, uuid
+import http.server, os, sys, json, locale, subprocess, shlex, uuid, re, urllib.request
 from urllib.parse import urlparse, parse_qs, unquote
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -40,6 +40,36 @@ def _load_appinfo():
         "tools": lines[0] if len(lines) >= 1 else "",
         "download": lines[1] if len(lines) >= 2 else "",
     }
+
+def _safe_filename(name, fallback):
+    """只保留文件名部分，去掉路径分隔符和 Windows 非法字符。"""
+    name = os.path.basename(str(name or "").replace("\\", "/")).strip()
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name)
+    return name or fallback
+
+def _tools_dir():
+    """工具配置目录；appinfo.txt 里的路径在别的电脑上不可用时回退到程序目录下的 tools。"""
+    d = _load_appinfo().get("tools") or ""
+    if not d:
+        d = os.path.join(os.getcwd(), "tools")
+    try:
+        os.makedirs(d, exist_ok=True)
+    except OSError:
+        d = os.path.join(os.getcwd(), "tools")
+        os.makedirs(d, exist_ok=True)
+    return d
+
+def _download_dir():
+    """下载目录；路径不可用时回退到程序目录下的 download，避免保存结果直接失败。"""
+    d = _load_appinfo().get("download") or ""
+    if not d:
+        d = os.path.join(os.getcwd(), "download")
+    try:
+        os.makedirs(d, exist_ok=True)
+    except OSError:
+        d = os.path.join(os.getcwd(), "download")
+        os.makedirs(d, exist_ok=True)
+    return d
 
 def _pick_download_dir_on_windows(start_hint):
     """用 PowerShell FolderBrowserDialog 弹框选目录，返回路径字符串（用户取消则返回空串）。
@@ -91,6 +121,122 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._handle_pick_download_dir(parse_qs(parsed.query))
         else:
             super().do_GET()
+
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        if parsed.path == "/save-cover":
+            self._handle_save_cover(parse_qs(parsed.query))
+        elif parsed.path == "/rename-cover":
+            self._handle_rename_cover()
+        elif parsed.path == "/save-tool":
+            self._handle_save_tool()
+        elif parsed.path == "/delete-tool":
+            self._handle_delete_tool()
+        elif parsed.path == "/save-image":
+            self._handle_save_image()
+        else:
+            self._send_json(404, {"ok": False, "error": "unknown endpoint"})
+
+    def _read_json_body(self):
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            raw = self.rfile.read(n) if n else b""
+            return json.loads(raw.decode("utf-8")) if raw else {}
+        except Exception:
+            return None
+
+    def _handle_save_cover(self, qs):
+        """保存封面：body 为图片二进制，name 为基名，按 PNG 魔数决定扩展名。"""
+        base = _safe_filename(unquote((qs.get("name") or [""])[0]), "cover")
+        n = int(self.headers.get("Content-Length") or 0)
+        data = self.rfile.read(n) if n else b""
+        if not data:
+            self._send_json(400, {"ok": False, "error": "empty body"})
+            return
+        ext = ".png" if data[:8] == b"\x89PNG\r\n\x1a\n" else ".jpg"
+        d = _tools_dir()
+        for old_ext in (".png", ".jpg"):
+            if old_ext != ext:
+                try: os.remove(os.path.join(d, base + old_ext))
+                except OSError: pass
+        fn = base + ext
+        with open(os.path.join(d, fn), "wb") as f:
+            f.write(data)
+        self._send_json(200, {"ok": True, "file": fn})
+
+    def _handle_rename_cover(self):
+        """工具改名时同步重命名封面文件。"""
+        obj = self._read_json_body()
+        if obj is None:
+            self._send_json(400, {"ok": False, "error": "invalid json"})
+            return
+        old = _safe_filename(obj.get("old"), "")
+        new = _safe_filename(obj.get("new"), "")
+        if not old or not new:
+            self._send_json(400, {"ok": False, "error": "old/new required"})
+            return
+        d = _tools_dir()
+        moved = []
+        for ext in (".png", ".jpg"):
+            src = os.path.join(d, old + ext)
+            if not os.path.isfile(src):
+                continue
+            for other in (".png", ".jpg"):
+                if other != ext:
+                    try: os.remove(os.path.join(d, new + other))
+                    except OSError: pass
+            os.replace(src, os.path.join(d, new + ext))
+            moved.append(new + ext)
+        self._send_json(200, {"ok": True, "files": moved})
+
+    def _handle_save_tool(self):
+        """把工具配置 JSON 写入 tools 目录，免去浏览器的目录授权。"""
+        obj = self._read_json_body()
+        if obj is None:
+            self._send_json(400, {"ok": False, "error": "invalid json"})
+            return
+        fn = _safe_filename(obj.get("file"), "tool.rhtool.json")
+        if not fn.lower().endswith(".json"):
+            fn += ".rhtool.json"
+        try:
+            with open(os.path.join(_tools_dir(), fn), "w", encoding="utf-8") as f:
+                f.write(obj.get("content") or "")
+            self._send_json(200, {"ok": True, "file": fn})
+        except Exception as e:
+            self._send_json(500, {"ok": False, "error": str(e)})
+
+    def _handle_delete_tool(self):
+        obj = self._read_json_body()
+        if obj is None:
+            self._send_json(400, {"ok": False, "error": "invalid json"})
+            return
+        fn = _safe_filename(obj.get("file"), "")
+        if fn:
+            try: os.remove(os.path.join(_tools_dir(), fn))
+            except OSError: pass
+        self._send_json(200, {"ok": True})
+
+    def _handle_save_image(self):
+        """服务端直接把生成结果下载到已配置的下载目录，浏览器无需授权文件夹。"""
+        obj = self._read_json_body()
+        if obj is None:
+            self._send_json(400, {"ok": False, "error": "invalid json"})
+            return
+        url = (obj.get("url") or "").strip()
+        if not (url.startswith("http://") or url.startswith("https://")):
+            self._send_json(400, {"ok": False, "error": "url must be http(s)"})
+            return
+        fname = _safe_filename(obj.get("filename"), "result.bin")
+        path = os.path.join(_download_dir(), fname)
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=120) as r:
+                data = r.read()
+            with open(path, "wb") as f:
+                f.write(data)
+            self._send_json(200, {"ok": True, "path": path, "size": len(data)})
+        except Exception as e:
+            self._send_json(500, {"ok": False, "error": str(e)})
 
     def _handle_appinfo(self):
         info = _load_appinfo()
