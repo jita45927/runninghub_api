@@ -210,6 +210,39 @@ document.getElementById("resetToolsBtn").onclick = async () => {
   else showStatus("缓存已清空，但未读到工具配置，请检查 tools 目录或点击「配置目录」授权", "err");
 };
 
+// ================= 退出程序（仅本地服务模式） =================
+// 打包成无窗口 exe 后没有控制台可关，这里提供唯一的正常退出入口
+function initQuitButton() {
+  const btn = document.getElementById("quitBtn");
+  if (!btn || !location.protocol.startsWith("http")) return;  // file:// 直接打开时没有后台服务
+  btn.style.display = "";
+  btn.onclick = async () => {
+    if (!confirm("确定退出程序吗？退出后本地服务会停止，需要重新双击桌面图标才能再次使用。")) return;
+    btn.disabled = true;
+    btn.textContent = "正在退出…";
+    try { await fetch("/shutdown", { method: "POST" }); } catch (e) {}
+    document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;line-height:1.9;color:#8b93a7">'
+      + '<div><div style="font-size:44px">👋</div>'
+      + '<div style="font-size:18px;color:#e6e9f2;margin:8px 0">程序已退出</div>'
+      + '<div>可以关闭此页面了</div></div></div>';
+  };
+}
+
+// ================= 外部链接统一交给系统浏览器 =================
+// 应用窗口没有地址栏，站外链接不能在窗口里跳走，否则回不来
+function initExternalLinks() {
+  if (!location.protocol.startsWith("http")) return;  // file:// 模式保持浏览器默认行为
+  document.addEventListener("click", e => {
+    const a = e.target.closest ? e.target.closest("a[href]") : null;
+    if (!a) return;
+    const href = a.getAttribute("href") || "";
+    if (!/^https?:\/\//i.test(href)) return;
+    if (a.origin === location.origin) return;
+    e.preventDefault();
+    fetch("/open-url?u=" + encodeURIComponent(a.href), { method: "POST" }).catch(() => {});
+  }, true);
+}
+
 // ================= 初始化 =================
 document.getElementById("runBtn").onclick = runActiveTool;
 document.getElementById("cancelBtn").onclick = cancelCurrentRun;
@@ -247,6 +280,8 @@ initModals(renderAll, appPanel);
 initSetupWizard({ grantToolsDir, grantDownloadDir });
 initDirState();
 initOpenDirButton();
+initQuitButton();
+initExternalLinks();
 initToolsDirState();
 refreshKeyBtn();
 renderAll();

@@ -3,10 +3,16 @@
 #   /appinfo            → 返回 {tools, download, session}，session 每次启动都不同
 #   /open-dir?path=...  → 调起 Windows 资源管理器打开指定目录
 #   /pick-download-dir  → 弹系统 FolderBrowserDialog 让用户选下载目录，写回 appinfo.txt 第二行
-import http.server, os, sys, json, locale, subprocess, shlex, uuid, re, urllib.request
+import http.server, os, sys, json, locale, subprocess, shlex, uuid, re, urllib.request, threading, webbrowser, time
 from urllib.parse import urlparse, parse_qs, unquote
 
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+# 程序根目录：源码运行时是 server.py 所在目录；打包成 exe 后是 exe 所在目录
+def _app_dir():
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
+os.chdir(_app_dir())
 
 APPINFO = "appinfo.txt"
 SESSION_ID = uuid.uuid4().hex  # 每次启动 server 生成新会话号，用于清空上一次的生成结果
@@ -105,6 +111,85 @@ def _pick_download_dir_on_windows(start_hint):
         print("[server] FolderBrowserDialog error: " + str(e), file=sys.stderr)
         return ""
 
+# ================= 外部链接：默认浏览器打开并切到前台 =================
+# server 不是前台进程，直接 ShellExecute 时浏览器窗口只会闪在任务栏，不会跑到前面
+_BROWSER_EXES = ("msedge.exe", "chrome.exe", "firefox.exe", "brave.exe", "opera.exe",
+                 "vivaldi.exe", "360se.exe", "360chrome.exe", "qqbrowser.exe")
+_APP_TITLE = "RunningHub AI设计师工具箱"
+
+def _open_external_url(url):
+    if os.name != "nt":
+        webbrowser.open(url)
+        return
+    import ctypes
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+
+    def exe_name(pid):
+        """取进程可执行文件名（小写），用于识别浏览器窗口。"""
+        h = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not h:
+            return ""
+        try:
+            buf = ctypes.create_unicode_buffer(1024)
+            size = ctypes.c_ulong(1024)
+            if kernel32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(size)):
+                return os.path.basename(buf.value).lower()
+        finally:
+            kernel32.CloseHandle(h)
+        return ""
+
+    def top_browser_window():
+        found = []
+
+        @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+        def callback(hwnd, _):
+            if not user32.IsWindowVisible(hwnd):
+                return True
+            n = user32.GetWindowTextLengthW(hwnd)
+            if n <= 0:
+                return True
+            title = ctypes.create_unicode_buffer(n + 1)
+            user32.GetWindowTextW(hwnd, title, n + 1)
+            if _APP_TITLE in title.value:
+                return True  # 跳过本程序自己的应用窗口
+            pid = ctypes.c_ulong(0)
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            if exe_name(pid.value) in _BROWSER_EXES:
+                found.append(hwnd)
+                return False  # EnumWindows 按 Z 序，第一个就是最上层，无需继续
+            return True
+
+        user32.EnumWindows(callback, 0)
+        return found[0] if found else None
+
+    def activate(hwnd):
+        if user32.IsIconic(hwnd):
+            user32.ShowWindow(hwnd, 9)  # SW_RESTORE：最小化时先还原
+        fg = user32.GetForegroundWindow()
+        fg_thread = user32.GetWindowThreadProcessId(fg, None) if fg else 0
+        target_thread = user32.GetWindowThreadProcessId(hwnd, None)
+        attached = False
+        if fg_thread and target_thread and fg_thread != target_thread:
+            user32.AttachThreadInput(fg_thread, target_thread, True)
+            attached = True
+        # ALT 键抖动 + AttachThreadInput：绕过 Windows 的"禁止抢占前台"限制
+        user32.keybd_event(0x12, 0, 0, 0)
+        user32.keybd_event(0x12, 0, 2, 0)
+        user32.SetForegroundWindow(hwnd)
+        user32.BringWindowToTop(hwnd)
+        if attached:
+            user32.AttachThreadInput(fg_thread, target_thread, False)
+
+    webbrowser.open(url)
+    # 浏览器打开窗口/切换标签需要一点时间，最多等 3 秒
+    for _ in range(15):
+        time.sleep(0.2)
+        hwnd = top_browser_window()
+        if hwnd:
+            activate(hwnd)
+            return
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header("Cache-Control", "no-store, must-revalidate")
@@ -134,8 +219,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._handle_delete_tool()
         elif parsed.path == "/save-image":
             self._handle_save_image()
+        elif parsed.path == "/shutdown":
+            self._handle_shutdown()
+        elif parsed.path == "/open-url":
+            self._handle_open_url(parse_qs(parsed.query))
         else:
             self._send_json(404, {"ok": False, "error": "unknown endpoint"})
+
+    def _handle_open_url(self, qs):
+        """外部链接交给系统默认浏览器打开：应用窗口无地址栏，不能在窗口内跳走。"""
+        url = (qs.get("u") or [""])[0]
+        if not re.match(r"^https?://", url, re.I):
+            self._send_json(400, {"ok": False, "error": "only http(s) allowed"})
+            return
+        threading.Thread(target=_open_external_url, args=(url,), daemon=True).start()
+        self._send_json(200, {"ok": True})
+
+    def _handle_shutdown(self):
+        """退出程序：先返回响应，再由另一个线程停止服务（shutdown 不能在本线程调用）。"""
+        self._send_json(200, {"ok": True})
+        threading.Thread(target=self.server.shutdown, daemon=True).start()
 
     def _read_json_body(self):
         try:
@@ -313,14 +416,33 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 # 端口可用命令行参数覆盖：python server.py 8900
 # 默认 8900，避免与同机的 COMFYUI_api 程序（8899）冲突
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8900
+DEFAULT_PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8900
 
 class AppServer(http.server.ThreadingHTTPServer):
     # Windows 下默认允许重复占用同一端口，会出现新旧两个后台同时"监听"、
     # 刷新后时而旧版时而新版；这里禁止重复占用，配合启动脚本先清理旧进程
     allow_reuse_address = False
 
-try:
-    AppServer(("127.0.0.1", PORT), Handler).serve_forever()
-except KeyboardInterrupt:
-    sys.exit(0)
+def serve(port=DEFAULT_PORT, on_ready=None):
+    """启动本地服务（阻塞）。端口被占用时自动顺延，on_ready(实际端口) 在开始监听后回调。"""
+    for p in range(port, port + 10):
+        try:
+            httpd = AppServer(("127.0.0.1", p), Handler)
+        except OSError:
+            continue
+        try:
+            if on_ready:
+                on_ready(p)
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            httpd.server_close()
+        return p
+    raise OSError("端口 %d-%d 均被占用，请关闭其它实例后重试" % (port, port + 9))
+
+if __name__ == "__main__":
+    try:
+        serve()
+    except KeyboardInterrupt:
+        sys.exit(0)
