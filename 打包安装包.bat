@@ -7,7 +7,7 @@ if not exist "%ISCC%" set ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe
 if not exist "%ISCC%" set ISCC=%ProgramFiles%\Inno Setup 6\ISCC.exe
 
 echo [1/2] 打包 exe ...
-python -m PyInstaller --noconfirm --clean --onedir --contents-directory . --noconsole --name RunningHubToolbox --icon "ICO\RAPI.ico" --add-data "index.html;." --add-data "ICO\RAPI.ico;." --add-data "css;css" --add-data "js;js" --add-data "tools;tools" launcher.py
+python -m PyInstaller --noconfirm --clean --onedir --contents-directory . --noconsole --name RunningHubToolbox --icon "ICO\RAPI.ico" --hidden-import "pystray._win32" --add-data "index.html;." --add-data "ICO\RAPI.ico;." --add-data "ICO;ICO" --add-data "css;css" --add-data "js;js" --add-data "tools;tools" launcher.py
 if errorlevel 1 (
   echo exe 打包失败
   pause
@@ -26,5 +26,5 @@ if errorlevel 1 (
 )
 
 echo.
-echo 完成：installer\RunningHub-AI-Toolbox-Setup-1.2.2.exe
+echo 完成：installer\RunningHub-AI-Toolbox-Setup-1.0.0.exe
 pause

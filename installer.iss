@@ -3,7 +3,7 @@
 ; 产物：installer\RunningHub-AI-Toolbox-Setup-<版本>.exe
 
 #define MyAppName "RunningHub AI 设计师工具箱"
-#define MyAppVersion "1.2.2"
+#define MyAppVersion "1.0.0"
 #define MyAppPublisher "RunningHub AI"
 #define MyAppExeName "RunningHubToolbox.exe"
 

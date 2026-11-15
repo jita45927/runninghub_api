@@ -9,14 +9,13 @@ const COVER_WIDTH = 600;    // 封面统一输出尺寸（3:4，与首页卡片�
 const COVER_HEIGHT = 800;
 
 let coverMap = new Map();  // 基名小写 → { name, url, objectUrl }
-let indexReady = false;    // 索引是否成功建立（区分「没有封面」和「没读到目录」）
 let refreshSeq = 0;        // 防止并发刷新时旧结果覆盖新结果
 
 function revokeMap(map) {
   map.forEach(item => { if (item.objectUrl) URL.revokeObjectURL(item.objectUrl); });
 }
 
-// 重建封面索引：已授权目录 → HTTP 目录列表 → 空索引（由 coverUrlFor 兜底）
+// 重建封面索引：已授权目录 → HTTP 目录列表 → 空索引（首页显示图标占位）
 export async function refreshCoverIndex() {
   const seq = ++refreshSeq;
   const next = new Map();
@@ -44,24 +43,19 @@ export async function refreshCoverIndex() {
         next.set(name.replace(IMG_RE, "").toLowerCase(), { name, url: "tools/" + encodeURIComponent(name) });
       }
       ready = true;
-    } catch (e) { /* 目录不可列时留空，由 coverUrlFor 的约定路径兜底 */ }
+    } catch (e) { /* 目录不可列时保留空索引，首页显示图标占位 */ }
   }
 
   if (seq !== refreshSeq) { revokeMap(next); return; }  // 已有更新的刷新在进行
   revokeMap(coverMap);
   coverMap = next;
-  indexReady = ready;
 }
 
-// 工具封面 URL；索引建立成功但没找到即视为无封面，索引未建立时按约定路径猜测
+// 首次绘制时索引尚未建立，先显示占位；showHomeView 刷新索引后会重绘真实封面
 export function coverUrlFor(toolName) {
   const base = toolBaseName({ name: toolName });
   const hit = coverMap.get(base.toLowerCase());
-  if (hit) return hit.url;
-  if (!indexReady && location.protocol.startsWith("http")) {
-    return "tools/" + encodeURIComponent(base) + ".png";
-  }
-  return null;
+  return hit ? hit.url : null;
 }
 
 // 居中裁剪为 3:4 并缩放到固定尺寸，避免大图直接作为封面造成显示压力

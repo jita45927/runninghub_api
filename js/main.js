@@ -211,20 +211,23 @@ document.getElementById("resetToolsBtn").onclick = async () => {
 };
 
 // ================= 退出程序（仅本地服务模式） =================
-// 打包成无窗口 exe 后没有控制台可关，这里提供唯一的正常退出入口
+// X 仅关闭窗口并保留托盘；此按钮确认后彻底退出，由启动器自动关闭窗口和托盘
 function initQuitButton() {
   const btn = document.getElementById("quitBtn");
   if (!btn || !location.protocol.startsWith("http")) return;  // file:// 直接打开时没有后台服务
   btn.style.display = "";
   btn.onclick = async () => {
-    if (!confirm("确定退出程序吗？退出后本地服务会停止，需要重新双击桌面图标才能再次使用。")) return;
+    if (!confirm("确定彻底退出程序吗？\n\n主窗口、后台服务和系统托盘都会关闭；正在运行的任务可能被中断。")) return;
     btn.disabled = true;
     btn.textContent = "正在退出…";
-    try { await fetch("/shutdown", { method: "POST" }); } catch (e) {}
-    document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;line-height:1.9;color:#8b93a7">'
-      + '<div><div style="font-size:44px">👋</div>'
-      + '<div style="font-size:18px;color:#e6e9f2;margin:8px 0">程序已退出</div>'
-      + '<div>可以关闭此页面了</div></div></div>';
+    try {
+      const r = await fetch("/shutdown", { method: "POST" });
+      if (!r.ok) throw new Error("shutdown failed");
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = "⏻ 退出程序";
+      showStatus("退出失败，请重试或使用系统托盘菜单退出", "err");
+    }
   };
 }
 
