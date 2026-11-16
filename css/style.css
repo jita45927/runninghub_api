@@ -64,7 +64,7 @@ body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: va
 .layout { flex: 1; display: flex; overflow: hidden; }
 
 /* 左侧工具栏 */
-.sidebar { width: 250px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+.sidebar { width: 375px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
 .sidebar-title { padding: 16px 16px 10px; font-size: 12px; color: var(--muted); letter-spacing: 1px; }
 .sidebar-tip { float: right; font-weight: 400; font-size: 11px; color: #4a5470; letter-spacing: 0; }
 .sidebar-foot { padding: 10px 16px 14px; text-align: center; }
@@ -140,9 +140,15 @@ body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: va
 }
 .tool-icon { width: 38px; height: 38px; border-radius: 9px; background: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 19px; flex-shrink: 0; }
 .tool-item.active .tool-icon { background: linear-gradient(135deg, #5b8cff33, #9b5bff33); }
-.tool-meta { min-width: 0; }
-.tool-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tool-desc { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tool-meta { min-width: 0; flex: 1; }
+.tool-name { font-size: 14px; font-weight: 600; line-height: 1.4; white-space: normal; overflow-wrap: anywhere; }
+.tool-desc {
+  display: none; font-size: 11px; color: var(--muted); margin-top: 4px;
+  line-height: 1.5; white-space: normal; overflow-wrap: anywhere;
+}
+/* 功能描述默认隐藏，鼠标悬停工具时展开显示 */
+.tool-item:hover .tool-desc { display: block; }
+.tool-item:hover .tool-desc:empty { display: none; }
 .tool-status { font-size: 10px; color: var(--red); }
 .tool-status.ok { color: var(--green); }
 .tool-status.running { color: #ffb454; }
