@@ -438,3 +438,66 @@ label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px
 .cover-edit-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .cover-edit-side { display: flex; flex-direction: column; gap: 8px; }
 .cover-edit-hint { font-size: 11px; color: #4a5470; line-height: 1.5; }
+
+/* ===== 推广条：使用指南按钮 ===== */
+.promo-bar .guide-btn {
+  padding: 1px 10px; font-size: 11px; cursor: pointer; font-family: inherit; white-space: nowrap;
+  color: #8ab4ff; background: #5b8cff1f; border: 1px solid #5b8cff66; border-radius: 999px;
+  transition: all .15s;
+}
+.promo-bar .guide-btn:hover { color: #fff; background: #5b8cff40; border-color: var(--accent); }
+
+/* ===== 首次使用分步向导 ===== */
+.guide-overlay { position: fixed; inset: 0; z-index: 10000; display: none; pointer-events: none; }
+.guide-overlay.show { display: block; }
+/* 截图步骤：整屏压暗；手指步骤由高亮挖孔的 box-shadow 压暗 */
+.guide-overlay.dim { background: rgba(4, 8, 18, .74); pointer-events: auto; }
+.guide-hole {
+  position: fixed; z-index: 10001; display: none; border-radius: 8px; border: 2px solid var(--accent);
+  box-shadow: 0 0 0 9999px rgba(4, 8, 18, .74), 0 0 18px rgba(91, 140, 255, .9);
+  pointer-events: none; transition: left .2s, top .2s, width .2s, height .2s;
+}
+.guide-finger {
+  position: fixed; z-index: 10002; display: none; font-size: 36px; line-height: 1; pointer-events: none;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .65)); animation: guideBob .9s ease-in-out infinite;
+}
+@keyframes guideBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+.guide-callout {
+  position: fixed; z-index: 10003; display: none; width: 460px; max-width: calc(100vw - 24px);
+  padding: 0; overflow: hidden; background: var(--panel); border: none; border-radius: 14px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .55); pointer-events: auto;
+}
+/* 无边框自定义标题栏（可拖动） */
+.guide-titlebar {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px;
+  background: linear-gradient(180deg, #222c44, #1a2234); border-bottom: 1px solid var(--border);
+  cursor: grab; user-select: none; touch-action: none;
+}
+.guide-titlebar:active { cursor: grabbing; }
+.guide-title { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; }
+.guide-step { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.guide-bar-space { flex: 1; }
+.guide-callout-text {
+  font-size: 14px; line-height: 1.8; color: #ffe9a8; background: #ffd76a14;
+  border-left: 3px solid #ffd76a; border-radius: 6px; padding: 10px 12px; margin: 14px 16px 0;
+}
+.guide-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; padding: 0 16px 16px; }
+.guide-actions .btn { padding: 8px 22px; font-size: 13px; }
+.guide-close {
+  padding: 2px 7px; font-size: 14px; line-height: 1; border-radius: 6px;
+  color: var(--muted); background: transparent; border: none; cursor: pointer;
+}
+.guide-close:hover { color: var(--text); background: #ffffff14; }
+.guide-shot {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 10004;
+  display: none; flex-direction: column; gap: 12px; width: min(880px, 94vw); max-height: 92vh;
+  padding: 0; overflow: hidden; background: var(--panel); border: none; border-radius: 16px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .6); pointer-events: auto;
+}
+.guide-shot.show { display: flex; }
+.guide-shot-media {
+  flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center;
+  margin: 0 16px; background: #0a0e16; border: none; border-radius: 10px; overflow: hidden;
+}
+.guide-shot-media img { display: block; max-width: 100%; max-height: 56vh; object-fit: contain; }
+.guide-shot .guide-actions { margin-top: 0; padding: 0 16px 16px; }

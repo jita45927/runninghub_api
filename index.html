@@ -42,14 +42,15 @@
 <!-- 推广条 -->
 <div class="promo-bar">
   <span>本工具调用 RunningHub-API · 宝藏 AIGC 平台 RunningHub，注册可赠送积分，AI 助力创意无边界，快来和我一起创作吧！</span>
-  <a href="https://www.runninghub.cn?inviteCode=v6f54jwt" target="_blank" rel="noopener">注册网站</a>
+  <a id="promoRegisterLink" href="https://www.runninghub.cn?inviteCode=v6f54jwt" target="_blank" rel="noopener">【Runninghub注册地址】</a>
   <a href="https://www.runninghub.cn/user-center/1958354621356011522/webapp?inviteCode=v6f54jwt" target="_blank" rel="noopener">我的主页 · AI马特</a>
   <a href="https://space.bilibili.com/1351334510?spm_id_from=333.337.0.0" target="_blank" rel="noopener">Bilibili · AI马特</a>
+  <button class="guide-btn" id="guideBtn" title="首次使用分步向导">📖 使用指南</button>
   <span class="repo-group">
     <a href="https://github.com/jita45927/runninghub_api" target="_blank" rel="noopener">GITHUB仓库地址</a>
     <button class="repo-copy-btn" id="repoCopyBtn" title="复制仓库地址">📋 复制</button>
   </span>
-  <span class="promo-line">本工具由TRAE-IDE工具辅助生成，通过我的分享链接注册并登录桌面端，新用户一次性获得 3,000 积分！<a href="https://www.trae.cn/events/code-fission/B8F6GKVM5QPU?utm_source=copy_link&amp;utm_medium=code_fission" target="_blank" rel="noopener">【注册地址】</a></span>
+  <span class="promo-line">本工具由TRAE-IDE工具辅助生成，通过我的分享链接注册并登录桌面端，新用户一次性获得 3,000 积分！<a href="https://www.trae.cn/events/code-fission/B8F6GKVM5QPU?utm_source=copy_link&amp;utm_medium=code_fission" target="_blank" rel="noopener">【TRAE注册地址】</a></span>
 </div>
 
 <!-- 顶栏 -->
@@ -473,6 +474,37 @@
   <div class="lb-bar">
     <span>点击空白处关闭</span>
     <a id="lbDownload" href="" target="_blank" rel="noopener" download>下载原图</a>
+  </div>
+</div>
+
+<!-- 首次使用分步向导 -->
+<div class="guide-overlay" id="guideOverlay">
+  <div class="guide-hole" id="guideHole"></div>
+  <div class="guide-finger" id="guideFinger">👆</div>
+  <div class="guide-callout" id="guideCallout">
+    <div class="guide-titlebar" id="guideCalloutBar">
+      <span class="guide-title">📖 使用指南</span>
+      <span class="guide-step" id="guideCalloutStep"></span>
+      <span class="guide-bar-space"></span>
+      <button class="guide-close" id="guideCalloutClose" title="关闭向导">✕</button>
+    </div>
+    <div class="guide-callout-text" id="guideCalloutText"></div>
+    <div class="guide-actions">
+      <button class="btn" id="guideCalloutNext">下一步</button>
+    </div>
+  </div>
+  <div class="guide-shot" id="guideShot">
+    <div class="guide-titlebar" id="guideShotBar">
+      <span class="guide-title">📖 使用指南</span>
+      <span class="guide-step" id="guideShotStep"></span>
+      <span class="guide-bar-space"></span>
+      <button class="guide-close" id="guideShotClose" title="关闭向导">✕</button>
+    </div>
+    <div class="guide-shot-media"><img id="guideShotImg" src="" alt="使用指南截图"></div>
+    <div class="guide-callout-text" id="guideShotText"></div>
+    <div class="guide-actions">
+      <button class="btn" id="guideShotNext">下一步</button>
+    </div>
   </div>
 </div>
 

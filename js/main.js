@@ -296,6 +296,172 @@ document.addEventListener("rh:grant-tools-dir", () => { grantToolsDir(); });
   };
 })();
 
+// ================= 首次使用分步向导 =================
+(function initUsageGuide() {
+  const openBtn = document.getElementById("guideBtn");
+  const overlay = document.getElementById("guideOverlay");
+  if (!openBtn || !overlay) return;
+  const hole = document.getElementById("guideHole");
+  const finger = document.getElementById("guideFinger");
+  const callout = document.getElementById("guideCallout");
+  const calloutText = document.getElementById("guideCalloutText");
+  const calloutStep = document.getElementById("guideCalloutStep");
+  const calloutNext = document.getElementById("guideCalloutNext");
+  const shot = document.getElementById("guideShot");
+  const shotImg = document.getElementById("guideShotImg");
+  const shotText = document.getElementById("guideShotText");
+  const shotStep = document.getElementById("guideShotStep");
+  const shotNext = document.getElementById("guideShotNext");
+
+  const steps = [
+    { anchor: "#promoRegisterLink", text: "本软件调用Runninghub网站平台提供的API,需要注册Runninghub,点此连接注册赠送网站积分。" },
+    { image: "ICO/guide/step1-api.png", text: "注册后点击网站【API】链接。" },
+    { image: "ICO/guide/step2-key.png", text: "点击【获取密钥】，获取API-KEY." },
+    { image: "ICO/guide/step3-new.png", text: "点击【新建】创建自己的API-key,并复制。调用API扣除钱包金额，不扣除积分，这点与在网站使用应用与工作流不同，因此需充值钱包，保证钱包余额充足，调用API与网站使用扣除积分等价，且钱包余额永久有效，不受会员期限限制。" },
+    { image: "ICO/guide/step4-recharge.png", text: "充值通道也可以点击自己头像，弹出窗口进行充值。" },
+    { anchor: "#keyBtn", text: "点击此按钮填入拷贝的API-KEY即可使用。" }
+  ];
+  let step = -1;
+  let anchorEl = null;
+
+  // 手指步骤：高亮挖孔对准目标元素，手指与提示卡跟随目标位置
+  function placeAtAnchor() {
+    if (!anchorEl) return;
+    const r = anchorEl.getBoundingClientRect();
+    const pad = 5;
+    const holeLeft = r.left - pad;
+    const holeTop = r.top - pad;
+    const holeW = r.width + pad * 2;
+    const holeH = r.height + pad * 2;
+    hole.style.left = holeLeft + "px";
+    hole.style.top = holeTop + "px";
+    hole.style.width = holeW + "px";
+    hole.style.height = holeH + "px";
+
+    callout.style.visibility = "hidden";
+    callout.style.display = "block";
+    const cw = callout.offsetWidth;
+    const ch = callout.offsetHeight;
+    let left = r.left + r.width / 2 - cw / 2;
+    left = Math.max(12, Math.min(left, window.innerWidth - cw - 12));
+
+    const below = holeTop + holeH + 46;
+    if (below + ch > window.innerHeight - 12) {
+      // 下方放不下时改为放在目标上方，手指朝下
+      finger.textContent = "👇";
+      finger.style.top = Math.max(12, holeTop - 44) + "px";
+      callout.style.top = Math.max(12, holeTop - 46 - ch) + "px";
+    } else {
+      finger.textContent = "👆";
+      finger.style.top = (holeTop + holeH + 4) + "px";
+      callout.style.top = below + "px";
+    }
+    finger.style.left = Math.max(8, Math.min(r.left + r.width / 2 - 18, window.innerWidth - 46)) + "px";
+    callout.style.left = left + "px";
+    callout.style.visibility = "";
+  }
+
+  function render() {
+    const s = steps[step];
+    const isShot = !!s.image;
+    overlay.classList.add("show");
+    overlay.classList.toggle("dim", isShot);
+    shot.classList.toggle("show", isShot);
+    hole.style.display = isShot ? "none" : "block";
+    finger.style.display = isShot ? "none" : "block";
+    callout.style.display = isShot ? "none" : "block";
+    const progress = (step + 1) + " / " + steps.length;
+    if (isShot) {
+      shotImg.src = s.image;
+      shotText.textContent = s.text;
+      shotStep.textContent = progress;
+      shotNext.textContent = step === steps.length - 1 ? "完成" : "下一步";
+    } else {
+      anchorEl = document.querySelector(s.anchor);
+      calloutText.textContent = s.text;
+      calloutStep.textContent = progress;
+      calloutNext.textContent = step === steps.length - 1 ? "完成" : "下一步";
+      requestAnimationFrame(placeAtAnchor);
+    }
+  }
+
+  function closeGuide() {
+    overlay.classList.remove("show", "dim");
+    shot.classList.remove("show");
+    hole.style.display = "none";
+    finger.style.display = "none";
+    callout.style.display = "none";
+    anchorEl = null;
+    step = -1;
+  }
+
+  function nextStep() {
+    if (step >= steps.length - 1) { closeGuide(); return; }
+    step++;
+    render();
+  }
+
+  // 无边框面板：拖动自定义标题栏移动
+  function enableDrag(panel, handle) {
+    let dragging = false;
+    let sx = 0, sy = 0, sl = 0, st = 0, pid = null;
+    handle.addEventListener("pointerdown", e => {
+      if (e.target.closest("button")) return;
+      const r = panel.getBoundingClientRect();
+      dragging = true;
+      pid = e.pointerId;
+      sx = e.clientX; sy = e.clientY; sl = r.left; st = r.top;
+      panel.style.transform = "none";
+      panel.style.left = r.left + "px";
+      panel.style.top = r.top + "px";
+      try { handle.setPointerCapture(pid); } catch (err) {}
+    });
+    handle.addEventListener("pointermove", e => {
+      if (!dragging) return;
+      const left = Math.max(4, Math.min(sl + e.clientX - sx, window.innerWidth - panel.offsetWidth - 4));
+      const top = Math.max(4, Math.min(st + e.clientY - sy, window.innerHeight - panel.offsetHeight - 4));
+      panel.style.left = left + "px";
+      panel.style.top = top + "px";
+    });
+    const end = () => {
+      if (!dragging) return;
+      dragging = false;
+      if (pid !== null) {
+        try { handle.releasePointerCapture(pid); } catch (err) {}
+        pid = null;
+      }
+    };
+    handle.addEventListener("pointerup", end);
+    handle.addEventListener("pointercancel", end);
+  }
+
+  function resetPanelPos(panel) {
+    panel.style.left = "";
+    panel.style.top = "";
+    panel.style.transform = "";
+  }
+
+  enableDrag(callout, document.getElementById("guideCalloutBar"));
+  enableDrag(shot, document.getElementById("guideShotBar"));
+
+  openBtn.onclick = () => {
+    step = 0;
+    resetPanelPos(callout);
+    resetPanelPos(shot);
+    render();
+  };
+  calloutNext.onclick = nextStep;
+  shotNext.onclick = nextStep;
+  document.getElementById("guideCalloutClose").onclick = closeGuide;
+  document.getElementById("guideShotClose").onclick = closeGuide;
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && step >= 0) closeGuide();
+  });
+  window.addEventListener("resize", () => {
+    if (step >= 0 && !steps[step].image) placeAtAnchor();
+  });
+})();
+
 initLightbox();
 initModals(renderAll, appPanel);
 initSetupWizard({ grantToolsDir, grantDownloadDir });
