@@ -23,7 +23,23 @@ export async function localFetch(path, options = {}) {
   }
   const headers = new Headers(options.headers || {});
   if (localToken) headers.set("X-RunningHub-Token", localToken);
-  return fetch(path, { ...options, headers });
+  const resp = await fetch(path, { ...options, headers });
+  // 本地服务重启后令牌会变化，页面若未刷新会一直拿旧令牌；遇到 403 自动换新令牌重试一次
+  if (resp.status === 403 && location.protocol.startsWith("http")) {
+    try {
+      const r = await fetch("/appinfo");
+      if (r.ok) {
+        const info = await r.json();
+        if (info.token && info.token !== localToken) {
+          localToken = info.token;
+          const retryHeaders = new Headers(options.headers || {});
+          retryHeaders.set("X-RunningHub-Token", localToken);
+          return fetch(path, { ...options, headers: retryHeaders });
+        }
+      }
+    } catch (e) { /* 保留原始 403 响应 */ }
+  }
+  return resp;
 }
 
 // 接口响应兜底：HTTP 错误或非 JSON 响应统一抛出可读错误

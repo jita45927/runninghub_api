@@ -206,7 +206,8 @@ def _open_external_url(url):
             return
 
 # 服务端自动下载只接受预期业务域名和常见云存储域名；其它结果仍可由浏览器直接下载。
-_DOWNLOAD_HOST_SUFFIXES = ("runninghub.cn", "runninghub.ai", "aliyuncs.com", "myqcloud.com")
+# rh-images.xiaoyaoyou.com、*.tos-cn-*.volces.com 是 RunningHub 生成结果的官方 CDN，必须放行。
+_DOWNLOAD_HOST_SUFFIXES = ("runninghub.cn", "runninghub.ai", "xiaoyaoyou.com", "volces.com", "aliyuncs.com", "myqcloud.com")
 
 
 def _validate_download_url(url):
@@ -218,7 +219,7 @@ def _validate_download_url(url):
     if parsed.port not in (None, 443):
         raise ValueError("only the default HTTPS port is allowed")
     if not any(host == suffix or host.endswith("." + suffix) for suffix in _DOWNLOAD_HOST_SUFFIXES):
-        raise ValueError("download host is not allowed")
+        raise ValueError("download host is not allowed: %s" % host)
     try:
         addresses = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
     except OSError as e:

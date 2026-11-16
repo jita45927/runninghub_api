@@ -176,6 +176,9 @@ export async function runActiveTool() {
           if (r.ok) {
             const j = await r.json();
             if (j && j.ok) { downloaded++; byServer++; continue; }
+          } else {
+            // 打印服务端拒绝原因，便于定位令牌/域名/网络问题
+            console.warn("服务端保存结果失败", r.status, await r.text().catch(() => ""), it.url);
           }
         } catch (e) { /* 旧版服务没有该接口，走下面的兜底 */ }
       }
