@@ -181,10 +181,18 @@ body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: va
 .card-title .note { font-size: 11px; font-weight: 400; color: #4a5470; }
 
 .upload-area {
+  position: relative;
   border: 2px dashed var(--border); border-radius: 12px; min-height: 150px;
   display: flex; align-items: center; justify-content: center; cursor: pointer;
   text-align: center; color: var(--muted); font-size: 13px; padding: 10px; transition: border-color .2s;
 }
+.upload-clear-btn {
+  position: absolute; top: 8px; right: 8px; z-index: 2;
+  width: 28px; height: 28px; padding: 0; border: 1px solid var(--border); border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(12, 15, 22, .82); color: #fff; font-size: 18px; line-height: 1; cursor: pointer;
+}
+.upload-clear-btn:hover { background: var(--red); border-color: var(--red); }
 .upload-area:hover, .upload-area.dragover { border-color: var(--accent); }
 .upload-area img {
   max-width: 100%; max-height: 260px; border-radius: 8px;

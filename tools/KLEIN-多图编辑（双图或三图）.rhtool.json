@@ -1,0 +1,65 @@
+{
+  "type": "runninghub-tool-config",
+  "version": 1,
+  "name": "KLEIN-多图编辑（双图或三图）",
+  "icon": "🖌️",
+  "desc": "上传多张参考图，按提示词融合人物、物体与场景；支持双图或三图模式，可调整出图比例和尺寸",
+  "sourceUrl": "",
+  "toolType": "app",
+  "webappId": "2122721462149799937",
+  "instanceType": "default",
+  "tags": [
+    "图片编辑"
+  ],
+  "fields": [
+    {
+      "label": "上传图片1",
+      "type": "image",
+      "nodeId": "165",
+      "fieldName": "image",
+      "def": ""
+    },
+    {
+      "label": "上传图片2",
+      "type": "image",
+      "nodeId": "178",
+      "fieldName": "image",
+      "def": ""
+    },
+    {
+      "label": "上传图片3",
+      "type": "image",
+      "nodeId": "183",
+      "fieldName": "image",
+      "def": ""
+    },
+    {
+      "label": "打开三图编辑（true=三图，false=双图）",
+      "type": "select",
+      "nodeId": "193",
+      "fieldName": "value",
+      "def": "true,false"
+    },
+    {
+      "label": "提示词",
+      "type": "textarea",
+      "nodeId": "167",
+      "fieldName": "text",
+      "def": "近景拍摄，图片1中的女人抱着图2的小熊坐在图3的场景中,虚化的背景，景深效果"
+    },
+    {
+      "label": "出图比例",
+      "type": "select",
+      "nodeId": "190",
+      "fieldName": "aspect_ratio",
+      "def": "3:4 (Portrait Standard),1:1 (Square),2:3 (Portrait Photo),3:2 (Photo),4:3 (Standard),9:16 (Portrait Widescreen),16:9 (Widescreen),21:9 (Ultrawide)"
+    },
+    {
+      "label": "出图尺寸（百万像素，1=1K，2=2K）",
+      "type": "number",
+      "nodeId": "191",
+      "fieldName": "value",
+      "def": "2"
+    }
+  ]
+}

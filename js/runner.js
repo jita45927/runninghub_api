@@ -110,12 +110,16 @@ export async function runActiveTool() {
     for (let i = 0; i < tool.fields.length; i++) {
       const f = tool.fields[i];
       if (f.type === "image") {
-        if (!state.fieldFiles[i]) throw new Error("请上传「" + f.label + "」");
-        throwIfCancelled();
-        showStatus("⏫ 正在上传「" + f.label + "」…（可点「立即取消」中断）");
-        const fileName = await uploadImage(state.fieldFiles[i], abortCtrl.signal);
-        throwIfCancelled();
-        nodeInfoList.push({ nodeId: f.nodeId, fieldName: f.fieldName, fieldValue: fileName });
+        // 图片均可选：有文件则上传，无文件则提交空值，由远端校验并返回错误
+        if (state.fieldFiles[i]) {
+          throwIfCancelled();
+          showStatus("⏫ 正在上传「" + f.label + "」…（可点「立即取消」中断）");
+          const fileName = await uploadImage(state.fieldFiles[i], abortCtrl.signal);
+          throwIfCancelled();
+          nodeInfoList.push({ nodeId: f.nodeId, fieldName: f.fieldName, fieldValue: fileName });
+        } else {
+          nodeInfoList.push({ nodeId: f.nodeId, fieldName: f.fieldName, fieldValue: "" });
+        }
       } else {
         const el = document.getElementById("ff_" + i);
         const v = el ? el.value.trim() : "";

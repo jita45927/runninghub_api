@@ -199,7 +199,22 @@ function renderImgPreview(ua, dataUrl, fieldIdx) {
     if (color) fieldPreviewUrls.set(baseKey(fieldIdx), src);
     else fieldPreviewUrls.delete(baseKey(fieldIdx));
     const modeText = info ? maskModeText(info) : "";
-    ua.innerHTML = `<img src="${src}"><div class="img-dim">📐 ${img.naturalWidth} × ${img.naturalHeight} px<br><small style="color:#8a93a8;font-size:11px">单击预览，双击更改图片</small><br><button type="button" class="mask-edit-btn">✏️ 绘制蒙版</button>${modeText ? `<div class="img-mask-state">${modeText}</div>` : ""}</div>`;
+    ua.innerHTML = `<button type="button" class="upload-clear-btn" title="删除当前图片" aria-label="删除当前图片">×</button><img src="${src}"><div class="img-dim">📐 ${img.naturalWidth} × ${img.naturalHeight} px<br><small style="color:#8a93a8;font-size:11px">单击预览，双击更改图片</small><br><button type="button" class="mask-edit-btn">✏️ 绘制蒙版</button>${modeText ? `<div class="img-mask-state">${modeText}</div>` : ""}</div>`;
+    const clearBtn = ua.querySelector(".upload-clear-btn");
+    clearBtn.onclick = e => {
+      e.preventDefault();
+      e.stopPropagation();  // 只清除图片，不触发预览或重新选择
+      clearTimeout(ua._clickTimer);
+      const key = baseKey(fieldIdx);
+      delete state.fieldFiles[fieldIdx];
+      fieldBaseFiles.delete(key);
+      fieldMaskInfo.delete(key);
+      fieldPreviewUrls.delete(key);
+      clearMaskCache(key);
+      const fi = document.getElementById("fi_" + fieldIdx);
+      if (fi) fi.value = "";
+      ua.innerHTML = `<span>双击选择图片，或拖拽到这里<br><small style="color:#4a5470">JPG / PNG / WEBP，≤30MB；上传后单击可预览缩放</small></span>`;
+    };
     const btn = ua.querySelector(".mask-edit-btn");
     if (btn) btn.onclick = e => {
       e.stopPropagation();  // 避免冒泡触发单击灯箱预览
