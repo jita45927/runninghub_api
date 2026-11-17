@@ -132,6 +132,27 @@ _BROWSER_EXES = ("msedge.exe", "chrome.exe", "firefox.exe", "brave.exe", "opera.
                  "vivaldi.exe", "360se.exe", "360chrome.exe", "qqbrowser.exe")
 _APP_TITLE = "RunningHub AI设计师工具箱"
 
+def _activate_window(hwnd):
+    """把窗口提到前台。server 不是前台进程，用 ALT 键抖动 + AttachThreadInput 绕过前台锁。"""
+    import ctypes
+    user32 = ctypes.windll.user32
+    if user32.IsIconic(hwnd):
+        user32.ShowWindow(hwnd, 9)  # SW_RESTORE：最小化时先还原
+    fg = user32.GetForegroundWindow()
+    fg_thread = user32.GetWindowThreadProcessId(fg, None) if fg else 0
+    target_thread = user32.GetWindowThreadProcessId(hwnd, None)
+    attached = False
+    if fg_thread and target_thread and fg_thread != target_thread:
+        user32.AttachThreadInput(fg_thread, target_thread, True)
+        attached = True
+    user32.keybd_event(0x12, 0, 0, 0)
+    user32.keybd_event(0x12, 0, 2, 0)
+    user32.SetForegroundWindow(hwnd)
+    user32.BringWindowToTop(hwnd)
+    if attached:
+        user32.AttachThreadInput(fg_thread, target_thread, False)
+
+
 def _open_external_url(url):
     if os.name != "nt":
         webbrowser.open(url)
@@ -179,22 +200,7 @@ def _open_external_url(url):
         return found[0] if found else None
 
     def activate(hwnd):
-        if user32.IsIconic(hwnd):
-            user32.ShowWindow(hwnd, 9)  # SW_RESTORE：最小化时先还原
-        fg = user32.GetForegroundWindow()
-        fg_thread = user32.GetWindowThreadProcessId(fg, None) if fg else 0
-        target_thread = user32.GetWindowThreadProcessId(hwnd, None)
-        attached = False
-        if fg_thread and target_thread and fg_thread != target_thread:
-            user32.AttachThreadInput(fg_thread, target_thread, True)
-            attached = True
-        # ALT 键抖动 + AttachThreadInput：绕过 Windows 的"禁止抢占前台"限制
-        user32.keybd_event(0x12, 0, 0, 0)
-        user32.keybd_event(0x12, 0, 2, 0)
-        user32.SetForegroundWindow(hwnd)
-        user32.BringWindowToTop(hwnd)
-        if attached:
-            user32.AttachThreadInput(fg_thread, target_thread, False)
+        _activate_window(hwnd)
 
     webbrowser.open(url)
     # 浏览器打开窗口/切换标签需要一点时间，最多等 3 秒
@@ -204,6 +210,45 @@ def _open_external_url(url):
         if hwnd:
             activate(hwnd)
             return
+
+# 资源管理器窗口会被应用窗口挡在后面；按目录路径找到对应窗口后提到前台。
+_EXPLORER_HWND_SCRIPT = r'''
+$target = [Environment]::GetEnvironmentVariable('RH_OPEN_DIR')
+if (-not $target) { exit 0 }
+$target = [System.IO.Path]::GetFullPath($target).TrimEnd('\')
+try { $shell = New-Object -ComObject Shell.Application } catch { exit 0 }
+for ($i = 0; $i -lt 25; $i++) {
+  foreach ($w in $shell.Windows()) {
+    try {
+      $p = $w.Document.Folder.Self.Path
+      if ($p -and [System.IO.Path]::GetFullPath($p).TrimEnd('\') -ieq $target) {
+        Write-Output ([int64]$w.HWND)
+        exit 0
+      }
+    } catch {}
+  }
+  Start-Sleep -Milliseconds 200
+}
+exit 0
+'''
+
+
+def _focus_explorer_window(path):
+    """打开目录后把对应资源管理器窗口置前；失败不影响目录已打开的结果。"""
+    try:
+        env = os.environ.copy()
+        env["RH_OPEN_DIR"] = path
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", _EXPLORER_HWND_SCRIPT],
+            capture_output=True, text=True, timeout=20,
+            encoding="utf-8", errors="replace", env=env,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        hwnd = int((result.stdout or "").strip() or "0")
+        if hwnd:
+            _activate_window(hwnd)
+    except Exception as e:
+        print("[server] focus explorer window failed: " + str(e), file=sys.stderr)
 
 # 服务端自动下载只接受预期业务域名和常见云存储域名；其它结果仍可由浏览器直接下载。
 # rh-images.xiaoyaoyou.com、*.tos-cn-*.volces.com 是 RunningHub 生成结果的官方 CDN，必须放行。
@@ -579,6 +624,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         try:
             if sys.platform.startswith("win"):
                 os.startfile(path)
+                # 窗口可能被应用窗口挡住；后台等窗口出现后把它提到前台
+                threading.Thread(target=_focus_explorer_window, args=(path,), daemon=True).start()
             else:
                 import shutil as _shutil
                 opener = _shutil.which("xdg-open") or _shutil.which("open")
