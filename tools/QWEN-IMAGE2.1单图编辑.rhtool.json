@@ -1,0 +1,58 @@
+{
+  "type": "runninghub-tool-config",
+  "version": 1,
+  "name": "QWEN-IMAGE2.1单图编辑",
+  "icon": "🎨",
+  "desc": "上传参考图，按提示词配合风格 LORA 转绘；可选择是否重设出图比例和尺寸，并调整 LORA 强度",
+  "sourceUrl": "https://www.runninghub.cn/ai-detail/2122995084869324801",
+  "toolType": "app",
+  "webappId": "2122995084869324801",
+  "instanceType": "default",
+  "tags": [
+    "图片编辑"
+  ],
+  "fields": [
+    {
+      "label": "上传参考图",
+      "type": "image",
+      "nodeId": "16",
+      "fieldName": "image",
+      "def": ""
+    },
+    {
+      "label": "提示词",
+      "type": "textarea",
+      "nodeId": "6",
+      "fieldName": "prompt",
+      "def": "女人头上戴着花环"
+    },
+    {
+      "label": "风格LORA强度",
+      "type": "number",
+      "nodeId": "14",
+      "fieldName": "strength_model",
+      "def": "1"
+    },
+    {
+      "label": "是否重设出图比例尺寸（true=重设，false=沿用原图）",
+      "type": "select",
+      "nodeId": "28",
+      "fieldName": "value",
+      "def": "true,false"
+    },
+    {
+      "label": "重设出图比例",
+      "type": "select",
+      "nodeId": "15",
+      "fieldName": "aspect_ratio",
+      "def": "3:2 (Photo),1:1 (Square),2:3 (Portrait Photo),3:4 (Portrait Standard),4:3 (Standard),9:16 (Portrait Widescreen),16:9 (Widescreen),21:9 (Ultrawide)"
+    },
+    {
+      "label": "重设出图尺寸（1=1K，2=2K）",
+      "type": "number",
+      "nodeId": "15",
+      "fieldName": "megapixels",
+      "def": "1"
+    }
+  ]
+}

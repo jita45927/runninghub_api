@@ -1,0 +1,51 @@
+{
+  "type": "runninghub-tool-config",
+  "version": 1,
+  "name": "单图一致性编辑",
+  "icon": "🪄",
+  "desc": "上传单张人物参考图，按提示词改换姿态、视角与服饰并保持人物一致性；可调整一致性 LORA 强度，并选择是否重设出图尺寸",
+  "sourceUrl": "https://www.runninghub.cn/ai-detail/2123016209833750530",
+  "toolType": "app",
+  "webappId": "2123016209833750530",
+  "instanceType": "default",
+  "tags": [
+    "图片编辑"
+  ],
+  "fields": [
+    {
+      "label": "上传参考图",
+      "type": "image",
+      "nodeId": "23",
+      "fieldName": "image",
+      "def": ""
+    },
+    {
+      "label": "提示词",
+      "type": "textarea",
+      "nodeId": "25",
+      "fieldName": "text",
+      "def": "女人背过身，转头看向镜头，带着一顶带有花环的草帽"
+    },
+    {
+      "label": "是否重设出图尺寸（true=重设，false=沿用原图）",
+      "type": "select",
+      "nodeId": "22",
+      "fieldName": "value",
+      "def": "false,true"
+    },
+    {
+      "label": "重设出图尺寸（1=1K，2=2K）",
+      "type": "number",
+      "nodeId": "30",
+      "fieldName": "value",
+      "def": "1.5"
+    },
+    {
+      "label": "一致性LORA强度",
+      "type": "number",
+      "nodeId": "29",
+      "fieldName": "strength_model",
+      "def": "0.5"
+    }
+  ]
+}

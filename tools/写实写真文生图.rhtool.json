@@ -1,0 +1,51 @@
+{
+  "type": "runninghub-tool-config",
+  "version": 1,
+  "name": "写实写真文生图",
+  "icon": "📸",
+  "desc": "输入提示词生成写实写真图片；可调整出图比例、出图尺寸、LORA 强度和随机种子",
+  "sourceUrl": "https://www.runninghub.cn/ai-detail/2122992239264747521",
+  "toolType": "app",
+  "webappId": "2122992239264747521",
+  "instanceType": "default",
+  "tags": [
+    "文生图"
+  ],
+  "fields": [
+    {
+      "label": "提示词",
+      "type": "textarea",
+      "nodeId": "509",
+      "fieldName": "text",
+      "def": "写实摄影，胶片风格，唯美写真，近景拍摄，一个亚洲女生身穿吊带青蓝紫渐变色薄纱沙滩长裙看向镜头，侧坐在沙滩上的野餐垫上，野餐垫上放着水果篮和食物，上方露出阳伞一角，背景有很多人，沙滩椰子树背景，景深效果，虚化的背景"
+    },
+    {
+      "label": "出图比例",
+      "type": "select",
+      "nodeId": "13",
+      "fieldName": "aspect_ratio",
+      "def": "3:4 (Portrait Standard),1:1 (Square),2:3 (Portrait Photo),3:2 (Photo),4:3 (Standard),9:16 (Portrait Widescreen),16:9 (Widescreen),21:9 (Ultrawide)"
+    },
+    {
+      "label": "出图尺寸（1=1K，2=2K）",
+      "type": "number",
+      "nodeId": "13",
+      "fieldName": "megapixels",
+      "def": "1"
+    },
+    {
+      "label": "LORA强度",
+      "type": "number",
+      "nodeId": "510",
+      "fieldName": "strength_model",
+      "def": "1"
+    },
+    {
+      "label": "随机种子",
+      "type": "number",
+      "nodeId": "506",
+      "fieldName": "noise_seed",
+      "def": "152647713849621"
+    }
+  ]
+}

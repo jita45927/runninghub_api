@@ -317,8 +317,9 @@ document.addEventListener("rh:grant-tools-dir", () => { grantToolsDir(); });
     { anchor: "#promoRegisterLink", text: "本软件调用Runninghub网站平台提供的API,需要注册Runninghub,点此连接注册赠送网站积分。" },
     { image: "ICO/guide/step1-api.png", text: "注册后点击网站【API】链接。" },
     { image: "ICO/guide/step2-key.png", text: "点击【获取密钥】，获取API-KEY." },
-    { image: "ICO/guide/step3-new.png", text: "点击【新建】创建自己的API-key,并复制。调用API扣除钱包金额，不扣除积分，这点与在网站使用应用与工作流不同，因此需充值钱包，保证钱包余额充足，调用API与网站使用扣除积分等价，且钱包余额永久有效，不受会员期限限制。" },
-    { image: "ICO/guide/step4-recharge.png", text: "充值通道也可以点击自己头像，弹出窗口进行充值。" },
+    { image: "ICO/guide/step3-type.png", text: "可获取企业级和消费级API,消费级消耗积分，企业级消耗钱包，建议获取企业级。钱包不随会员到期清空。" },
+    { image: "ICO/guide/step4-new.png", text: "点击【新建】创建自己的API-key,并复制。调用企业级API扣除钱包金额，不扣除积分，这点与在网站使用应用与工作流不同，因此需充值钱包，保证钱包余额充足，API与网站使用扣除积分等价，且钱包余额永久有效，不受会员期限限制。" },
+    { image: "ICO/guide/step5-recharge.png", text: "充值通道也可以点击自己头像，弹出窗口进行充值。" },
     { anchor: "#keyBtn", text: "点击此按钮填入拷贝的API-KEY即可使用。" }
   ];
   let step = -1;

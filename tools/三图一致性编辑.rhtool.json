@@ -1,0 +1,72 @@
+{
+  "type": "runninghub-tool-config",
+  "version": 1,
+  "name": "三图一致性编辑",
+  "icon": "🧩",
+  "desc": "上传三张图片，按提示词融合替换人物服装与背景；可调整一致性 LORA 强度，并选择是否重设出图比例和尺寸",
+  "sourceUrl": "https://www.runninghub.cn/ai-detail/2123010587927072770",
+  "toolType": "app",
+  "webappId": "2123010587927072770",
+  "instanceType": "default",
+  "tags": [
+    "图片编辑"
+  ],
+  "fields": [
+    {
+      "label": "上传图1（人物）",
+      "type": "image",
+      "nodeId": "41",
+      "fieldName": "image",
+      "def": ""
+    },
+    {
+      "label": "上传图2（服装参考）",
+      "type": "image",
+      "nodeId": "79",
+      "fieldName": "image",
+      "def": ""
+    },
+    {
+      "label": "上传图3（背景参考）",
+      "type": "image",
+      "nodeId": "81",
+      "fieldName": "image",
+      "def": ""
+    },
+    {
+      "label": "提示词",
+      "type": "textarea",
+      "nodeId": "109",
+      "fieldName": "text",
+      "def": "让图1的女人的衣服替换为图2的衣服，把背景替换成图3的背景"
+    },
+    {
+      "label": "一致性LORA强度",
+      "type": "number",
+      "nodeId": "114",
+      "fieldName": "strength_model",
+      "def": "0.5"
+    },
+    {
+      "label": "是否重设出图比例与尺寸（true=重设，false=沿用原图）",
+      "type": "select",
+      "nodeId": "105",
+      "fieldName": "value",
+      "def": "true,false"
+    },
+    {
+      "label": "重设出图比例",
+      "type": "select",
+      "nodeId": "108",
+      "fieldName": "aspect_ratio",
+      "def": "3:2 (Photo),1:1 (Square),2:3 (Portrait Photo),3:4 (Portrait Standard),4:3 (Standard),9:16 (Portrait Widescreen),16:9 (Widescreen),21:9 (Ultrawide)"
+    },
+    {
+      "label": "重设出图尺寸（1=1K，2=2K）",
+      "type": "number",
+      "nodeId": "108",
+      "fieldName": "megapixels",
+      "def": "1"
+    }
+  ]
+}
