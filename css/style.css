@@ -285,6 +285,9 @@ label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px
 .status-bar.show { display: block; }
 .status-bar.error { color: var(--red); }
 .status-bar.success { color: var(--green); }
+/* 兼容旧调用点仍传 ok / err 的写法，与 success / error 同色 */
+.status-bar.ok { color: var(--green); }
+.status-bar.err { color: var(--red); }
 
 .result-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
 .result-batch { margin-bottom: 18px; }
