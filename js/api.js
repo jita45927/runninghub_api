@@ -156,9 +156,10 @@ export function parseListOptions(fieldData) {
 }
 
 // 运行成功后补全下拉选项：只处理「配置时只填了一个默认值」的 select 字段
+// 带 valueMap 的字段跳过：显示名与提交值的映射由配置唯一决定，自动拉取的候选会破坏映射对应关系
 export async function enrichSelectOptions(tool) {
   const targets = (tool.fields || []).filter(f =>
-    f.type === "select" && (f.def || "").split(",").map(s => s.trim()).filter(Boolean).length <= 1
+    f.type === "select" && !f.valueMap && (f.def || "").split(",").map(s => s.trim()).filter(Boolean).length <= 1
   );
   if (!targets.length) return 0;
   const nodes = await fetchNodeList(tool);

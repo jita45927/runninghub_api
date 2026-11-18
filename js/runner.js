@@ -124,7 +124,13 @@ export async function runActiveTool() {
         const el = document.getElementById("ff_" + i);
         const v = el ? el.value.trim() : "";
         const val = v !== "" ? v : (f.def || "");
-        if (val !== "") nodeInfoList.push({ nodeId: f.nodeId, fieldName: f.fieldName, fieldValue: val });
+        if (val === "") continue;
+        // valueMap 翻译：下拉显示名 → 配置的提交值（如 风格名 → 序号）
+        let out = val;
+        if (f.valueMap && Object.prototype.hasOwnProperty.call(f.valueMap, out)) out = String(f.valueMap[out]);
+        // 数字字段/映射值以真实数字类型提交：自定义节点（如 YC Super Selector）不做字符串转数字，传字符串会运行失败
+        if ((f.type === "number" || f.valueMap) && out !== "" && isFinite(Number(out))) out = Number(out);
+        nodeInfoList.push({ nodeId: f.nodeId, fieldName: f.fieldName, fieldValue: out });
       }
     }
     // 仅当工具配置了输入项却全部为空时才视为配置错误；

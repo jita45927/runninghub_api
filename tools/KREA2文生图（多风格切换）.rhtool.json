@@ -1,0 +1,74 @@
+{
+  "type": "runninghub-tool-config",
+  "version": 1,
+  "name": "KREA2文生图（多风格切换）",
+  "icon": "🖼️",
+  "desc": "krea2文生图，底模切换写实与动漫，配合多风格LORA使用，暴露切换调用给API,实现一个工作流切换多种风格。注意提示词与底模和LORA同时搭配改变，LORA切换后面括号中的内容是【触发词】，要出该风格需填入提示词",
+  "sourceUrl": "https://www.runninghub.cn/post/2122769142142033922",
+  "toolType": "workflow",
+  "webappId": "2122769142142033922",
+  "instanceType": "default",
+  "tags": [
+    "文生图"
+  ],
+  "fields": [
+    {
+      "label": "底模切换（1=写实，2=动漫）",
+      "type": "select",
+      "nodeId": "689",
+      "fieldName": "Input",
+      "def": "写实风格,动漫风格",
+      "valueMap": {
+        "写实风格": "1",
+        "动漫风格": "2"
+      }
+    },
+    {
+      "label": "LORA风格切换",
+      "type": "select",
+      "nodeId": "668",
+      "fieldName": "index",
+      "def": "写实唯美复古（AURORAL Retro）,写实摄影纯欲少女,写实摄影轻度网红,美学建筑,插画漫画（RawColorDaal）,厚涂笔触,伪厚涂大笔触,80年代赛璐璐,线条动漫（线条动漫）,赛璐璐（高饱和）",
+      "valueMap": {
+        "写实唯美复古（AURORAL Retro）": "2",
+        "写实摄影纯欲少女": "0",
+        "写实摄影轻度网红": "1",
+        "美学建筑": "3",
+        "插画漫画（RawColorDaal）": "4",
+        "厚涂笔触": "5",
+        "伪厚涂大笔触": "6",
+        "80年代赛璐璐": "7",
+        "线条动漫（线条动漫）": "8",
+        "赛璐璐（高饱和）": "9"
+      }
+    },
+    {
+      "label": "出图比例",
+      "type": "select",
+      "nodeId": "74",
+      "fieldName": "aspect_ratio",
+      "def": "3:4 (Portrait Standard),1:1 (Square),2:3 (Portrait Photo),3:2 (Photo),4:3 (Standard),9:16 (Portrait Widescreen),16:9 (Widescreen),21:9 (Ultrawide)"
+    },
+    {
+      "label": "出图尺寸（1=1K，2=2K）",
+      "type": "number",
+      "nodeId": "74",
+      "fieldName": "megapixels",
+      "def": "1"
+    },
+    {
+      "label": "随机种子（每次想出不同图就换个数）",
+      "type": "number",
+      "nodeId": "2",
+      "fieldName": "seed",
+      "def": "1066912324103866"
+    },
+    {
+      "label": "提示词",
+      "type": "textarea",
+      "nodeId": "658",
+      "fieldName": "text",
+      "def": "写实摄影，一个穿着彩色比基尼的亚洲女孩看向镜头，正面摄影，下身裹着一条大大的彩色半透明丝巾，坐在沙滩的野餐垫上，上方露出阳伞一角，远处有很多人，沙滩椰子树背景"
+    }
+  ]
+}
