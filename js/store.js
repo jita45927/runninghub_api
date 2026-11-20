@@ -1,7 +1,7 @@
 // ================= 状态与存储层（公共核心） =================
 // 本文件由公共核心同步而来：请修改 runninghub_api/js/store.js，再运行「同步核心.ps1」。
 // localStorage（带损坏兜底）+ IndexedDB（记住目录/文件句柄）+ 跨模块共享的可变状态
-import { LS, DEFAULT_TOOLS } from "./config.js";
+import { LS, DEFAULT_TOOLS, migrateSeedFields } from "./config.js";
 
 // 跨模块共享状态（简单可变对象，各模块直接读写）
 export const state = {
@@ -11,7 +11,9 @@ export const state = {
   fieldFilesByTool: {},  // 每个工具各自的已选图片，切换工具后保留
   fieldValuesByTool: {}, // 每个工具本次运行期间改过的参数（按 nodeId|fieldName 记录），切换工具后恢复，刷新页面回到默认值
   toolResults: {},       // 每个工具各自的生成结果（按工具 id 隔离）
-  currentRun: null,      // 当前运行中的任务 {taskId, cancelled, abortCtrl}
+  currentRun: null,      // 当前运行中的任务 {id, taskId, cancelled, abort, paused}
+  runQueue: [],          // 本地待提交任务快照 FIFO，仅当前页面内存有效
+  runQueuePaused: false, // 远端状态未确定时暂停消费，避免重复提交
   runningToolId: null,   // 当前运行中任务所属的工具 id（用于阻止删除运行中的工具）
   lastDoneToolId: null,  // 最近一次成功完成生成的工具 id（左侧列表绿色高亮）
   dirHandle: null,       // 自定义下载目录句柄
@@ -53,6 +55,7 @@ loadedTools.forEach((t, i) => {
   if (!t.id) t.id = "t" + Date.now() + "_" + i;
   if (!Array.isArray(t.tags) && t.category) migratedTags = true;  // 有旧分类需要写回缓存
   normalizeToolTags(t);
+  migrateSeedFields(t);  // 旧的 seed 数字字段升级为随机种子字段
 });
 // 去重：同应用ID或同名的工具只保留第一个（清理历史遗留的重复项）
 // webappId 仅 RunningHub 配置有值，ComfyUI 侧为 undefined，此时按名称去重

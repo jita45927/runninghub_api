@@ -1,14 +1,15 @@
 // ================= 入口：初始化、事件绑定、模块装配 =================
 import { state, idbGet, idbSet } from "./store.js";
-import { renderToolList } from "./ui/toollist.js";
-import { renderWorkspace } from "./ui/form.js";
+import { renderToolList, refreshToolItemStates } from "./ui/toollist.js";
+import { renderWorkspace, showStatus, syncRunControls } from "./ui/form.js";
+import "./ui/fieldtypes.js";  // 注册 RunningHub 专属字段类型（随机种子）
+import { initPromptWeight } from "./ui/prompt-weight.js";  // 提示词 Ctrl+↑/↓ 调权重
 import { renderHome, showHomeView, showWorkView, setToolSearch } from "./ui/home.js";
 import { initLightbox } from "./ui/lightbox.js";
 import { initModals, initSetupWizard } from "./ui/modal.js";
 import { appPanel, refreshKeyBtn } from "./ui/panels.js";
 import { scanToolsDir, loadToolsFromDir, toolsDirGranted, resetToolsCache } from "./tools.js";
-import { runActiveTool, cancelCurrentRun, restoreResultsSession } from "./runner.js";
-import { showStatus } from "./ui/form.js";
+import { runActiveTool, queueActiveTool, cancelCurrentRun, clearQueuedRuns, restoreResultsSession } from "./runner.js";
 import { localFetch, setLocalToken } from "./api.js";
 
 let batDownloadDir = "";  // appinfo.txt 第二行：真实磁盘路径（唯一真相，server/资源管理器用）
@@ -251,7 +252,14 @@ function initExternalLinks() {
 
 // ================= 初始化 =================
 document.getElementById("runBtn").onclick = runActiveTool;
+document.getElementById("queueBtn").onclick = queueActiveTool;
 document.getElementById("cancelBtn").onclick = cancelCurrentRun;
+document.getElementById("clearQueueBtn").onclick = clearQueuedRuns;
+// 任务状态变化时只刷新列表和按钮，不重建表单
+document.addEventListener("tool-status", () => {
+  refreshToolItemStates();
+  syncRunControls();
+});
 
 // 首页入口；点击左侧工具条目后自动进入工作页（分类头的展开/收起不触发）
 document.getElementById("homeBtn").onclick = () => showHomeView();
@@ -472,5 +480,6 @@ initQuitButton();
 initExternalLinks();
 initToolsDirState();
 refreshKeyBtn();
+initPromptWeight();
 renderAll();
 showHomeView();  // 启动默认进入工具首页

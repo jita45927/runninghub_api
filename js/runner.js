@@ -1,7 +1,7 @@
-// ================= 任务运行流程：组装参数、提交、轮询、取消、自动下载、扣费提示 =================
+// ================= 任务运行流程：快照、本地列队、提交、轮询、取消、自动下载、扣费提示 =================
 import { state, activeTool, saveToDir, saveLastDone, saveTools } from "./store.js";
 import { apiKey, uploadImage, createTask, queryTask, cancelTask, enrichSelectOptions, localFetch } from "./api.js";
-import { showStatus, refreshSelectOptions } from "./ui/form.js";
+import { showStatus, writeFieldValue, refreshSelectOptions } from "./ui/form.js";
 import { buildResultHtml, bindResultImageDims } from "./ui/results.js";
 import { refreshToolItemStates } from "./ui/toollist.js";
 import { persistTool } from "./tools.js";
@@ -61,10 +61,16 @@ function showResultNotice(toolId, html) {
   saveResultsSession();
 }
 
-// 轮询查询任务（v2 查询接口直接返回状态+结果）
+function cloneValue(v) {
+  return typeof structuredClone === "function" ? structuredClone(v) : JSON.parse(JSON.stringify(v));
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// 轮询查询任务（v2 查询接口直接返回状态+结果）；取消状态只读取本任务
 async function waitTask(taskId, run, onTick) {
   for (let i = 0; i < 200; i++) {
-    await new Promise(r => setTimeout(r, 3000));
+    await sleep(3000);
     if (run.cancelled) return { cancelled: true, results: [], usage: {} };
     const json = await queryTask(taskId);
     onTick(json.status, i);
@@ -76,196 +82,346 @@ async function waitTask(taskId, run, onTick) {
   throw new Error("等待超时（10分钟），任务可能仍在运行，可稍后到官网查看");
 }
 
-// ================= 主流程 =================
-export async function runActiveTool() {
-  const runBtn = document.getElementById("runBtn");
-  if (state.currentRun) {
-    showStatus("已有任务正在运行，请先等待完成或取消当前任务", "error");
-    return;
+// 通知左侧列表刷新「运行中 / 最近完成」高亮与按钮状态
+function notifyToolStatus() {
+  document.dispatchEvent(new CustomEvent("tool-status"));
+}
+
+// 随机种子上限：2^53-1，保证在 JS / JSON 中不丢精度
+const SEED_MAX = Number.MAX_SAFE_INTEGER;
+function randomSeed() { return Math.floor(Math.random() * SEED_MAX); }
+
+// 点击「开始生成 / 进入列队」的快照时刻，按模式算出本次要提交的种子，
+// 并把显示的基准值推进到下一次（固定值不变），实现每次点击就地变化。
+// 递增/递减：本次提交当前基准值，之后基准 ±1，保证列队里每个任务种子连续独立。
+function resolveSeedValue(t, f, i) {
+  const el = document.getElementById("ff_" + i);
+  const modeEl = document.getElementById("fm_" + i);
+  const mode = modeEl ? modeEl.value : "random";
+  const base = Number(el ? el.value.trim() : "");
+  const baseValid = Number.isFinite(base);
+  const val = (mode === "random" || !baseValid) ? randomSeed() : base;
+
+  if (el) {
+    let next = null;
+    if (mode === "inc") next = (baseValid ? base : val) + 1;
+    else if (mode === "dec") next = (baseValid ? base : val) - 1;
+    else if (mode === "random") next = val;
+    if (next !== null) {
+      el.value = String(next);
+      writeFieldValue(t, f, String(next));  // 写回内存态，切换工具/刷新后仍保持推进后的值
+    }
   }
+  return String(val);
+}
+
+let queuePumping = false;
+let runSerial = 0;
+let statusOwner = 0;
+
+// 只有最新的远端任务可以写全局状态栏，旧任务的后台下载不能覆盖新任务进度
+function runStatus(run, text, type) {
+  if (run.id === statusOwner) showStatus(text, type);
+}
+
+// 同步固定点击时的完整参数；图片只保存不可变 File 引用，不做异步读取或上传
+function captureActiveTask() {
   const tool = activeTool();
-  if (!apiKey()) { showStatus("请先点击右上角设置 API Key", "error"); return; }
-  if (!tool) { showStatus("请先在左侧选择一个工具", "error"); return; }
-  if (tool.deleted) { showStatus("该工具在回收站中，请先在左侧还原再使用", "error"); return; }
-  if (!tool.webappId) { showStatus("当前工具未填写应用 ID，请点击右上角「配置此工具」", "error"); return; }
+  if (!apiKey()) { showStatus("请先点击右上角设置 API Key", "error"); return null; }
+  if (!tool) { showStatus("请先在左侧选择一个工具", "error"); return null; }
+  if (tool.deleted) { showStatus("该工具在回收站中，请先在左侧还原再使用", "error"); return null; }
+  if (!tool.webappId) { showStatus("当前工具未填写应用 ID，请点击右上角「配置此工具」", "error"); return null; }
 
-  runBtn.disabled = true;
-  const runToolId = tool.id;  // 记录本次运行属于哪个工具，防止运行中切换工具后结果串位
-  state.runningToolId = runToolId;
-  // 一开始就建立运行上下文并显示取消按钮：上传阶段也能随时中断
-  const abortCtrl = new AbortController();
-  const run = { taskId: null, cancelled: false, abortCtrl };
-  state.currentRun = run;
-  const cancelBtn = document.getElementById("cancelBtn");
-  cancelBtn.style.display = ""; cancelBtn.disabled = false;
-  refreshToolItemStates();  // 左侧列表立即显示"生成中"高亮
-  // 不在开始时清空结果区：保留历史结果，进度由状态栏提示
-  // 检查是否已被取消（各阶段之间调用，避免取消后继续提交）
-  const throwIfCancelled = () => {
-    if (run.cancelled) throw new DOMException("已取消", "AbortError");
+  const fields = cloneValue(tool.fields || []);
+  const files = Object.assign({}, state.fieldFiles);
+  const values = fields.map((f, i) => {
+    if (f.type === "image") return "";
+    if (f.type === "seed") return resolveSeedValue(tool, f, i);
+    const el = document.getElementById("ff_" + i);
+    const v = el ? el.value.trim() : "";
+    return v !== "" ? v : (f.def || "");
+  });
+
+  // 仅当工具配置了输入项却全部为空时才视为配置错误；
+  // 无输入项的"零参数工作流"允许空 nodeInfoList 提交；有图片字段时允许空值提交
+  const hasImageField = fields.some(f => f.type === "image");
+  const hasValue = values.some(v => v !== "");
+  if (fields.length && !hasImageField && !hasValue) {
+    showStatus("没有可提交的参数，请检查工具配置", "error");
+    return null;
+  }
+
+  return {
+    toolId: tool.id,
+    toolName: tool.name || "result",
+    tool: { toolType: tool.toolType || "app", webappId: tool.webappId, instanceType: tool.instanceType || "default" },
+    fields,
+    values,
+    files
   };
-  try {
-    // 逐字段组装 nodeInfoList
-    const nodeInfoList = [];
-    for (let i = 0; i < tool.fields.length; i++) {
-      const f = tool.fields[i];
-      if (f.type === "image") {
-        // 图片均可选：有文件则上传，无文件则提交空值，由远端校验并返回错误
-        if (state.fieldFiles[i]) {
-          throwIfCancelled();
-          showStatus("⏫ 正在上传「" + f.label + "」…（可点「立即取消」中断）");
-          const fileName = await uploadImage(state.fieldFiles[i], abortCtrl.signal);
-          throwIfCancelled();
-          nodeInfoList.push({ nodeId: f.nodeId, fieldName: f.fieldName, fieldValue: fileName });
-        } else {
-          nodeInfoList.push({ nodeId: f.nodeId, fieldName: f.fieldName, fieldValue: "" });
-        }
+}
+
+// 执行一个任务的远端阶段，不读取全局 currentRun
+async function executeRemote(run) {
+  const task = run.task;
+  const nodeInfoList = [];
+  for (let i = 0; i < task.fields.length; i++) {
+    const f = task.fields[i];
+    if (f.type === "image") {
+      // 图片均可选：有文件则上传，无文件则提交空值，由远端校验并返回错误
+      const file = task.files[i];
+      if (file) {
+        runStatus(run, "⏫ 正在上传「" + f.label + "」…（可点「立即取消」中断）");
+        const fileName = await uploadImage(file, run.abort.signal);
+        if (run.cancelled) return { cancelled: true, results: [], usage: {} };
+        nodeInfoList.push({ nodeId: f.nodeId, fieldName: f.fieldName, fieldValue: fileName });
       } else {
-        const el = document.getElementById("ff_" + i);
-        const v = el ? el.value.trim() : "";
-        const val = v !== "" ? v : (f.def || "");
-        if (val === "") continue;
-        // valueMap 翻译：下拉显示名 → 配置的提交值（如 风格名 → 序号）
-        let out = val;
-        if (f.valueMap && Object.prototype.hasOwnProperty.call(f.valueMap, out)) out = String(f.valueMap[out]);
-        // 数字字段/映射值以真实数字类型提交：自定义节点（如 YC Super Selector）不做字符串转数字，传字符串会运行失败
-        if ((f.type === "number" || f.valueMap) && out !== "" && isFinite(Number(out))) out = Number(out);
-        nodeInfoList.push({ nodeId: f.nodeId, fieldName: f.fieldName, fieldValue: out });
+        nodeInfoList.push({ nodeId: f.nodeId, fieldName: f.fieldName, fieldValue: "" });
       }
+      continue;
     }
-    // 仅当工具配置了输入项却全部为空时才视为配置错误；
-    // 无输入项的"零参数工作流"允许空 nodeInfoList 提交
-    if (!nodeInfoList.length && tool.fields && tool.fields.length) {
-      throw new Error("没有可提交的参数，请检查工具配置");
-    }
+    let out = task.values[i];
+    if (out === "" || out == null) continue;
+    // valueMap 翻译：下拉显示名 → 配置的提交值（如 风格名 → 序号）
+    if (f.valueMap && Object.prototype.hasOwnProperty.call(f.valueMap, out)) out = String(f.valueMap[out]);
+    // 数字字段/映射值以真实数字类型提交：自定义节点（如 YC Super Selector）不做字符串转数字
+    if ((f.type === "number" || f.type === "seed" || f.valueMap) && out !== "" && isFinite(Number(out))) out = Number(out);
+    nodeInfoList.push({ nodeId: f.nodeId, fieldName: f.fieldName, fieldValue: out });
+  }
 
-    throwIfCancelled();
-    showStatus("🚀 正在创建任务…");
-    const taskId = await createTask(tool, nodeInfoList, abortCtrl.signal);
-    run.taskId = taskId;
-    // 任务已提交成功但用户此刻点了取消：需要同时通知服务端停止，避免继续扣费
-    if (run.cancelled) {
-      try { await cancelTask(taskId); } catch (e) {}
-      throw new DOMException("已取消", "AbortError");
-    }
-    showStatus("⏳ 任务运行中（taskId: " + taskId + "）…");
-    const { results, usage, cancelled } = await waitTask(taskId, run, (s, i) => {
-      showStatus("⏳ 任务状态：" + (s || "未知") + "（已等待 " + (i * 3 + 3) + " 秒）");
-    });
+  if (run.cancelled) return { cancelled: true, results: [], usage: {} };
 
-    if (cancelled) {
-      showStatus("⏹ 已取消，任务已停止", "");
-      showResultNotice(runToolId, '<div class="result-placeholder">已取消</div>');
-      return;
-    }
-
-    // 结果追加到该工具的历史记录；若用户还停留在该工具界面则直接更新显示
-    appendResultBatch(runToolId, buildResultHtml(results));
-    // 标记最近完成工具（左侧列表绿色高亮，刷新后保留）
-    state.lastDoneToolId = runToolId;
-    saveLastDone();
-    // 图片加载完成后回填像素尺寸（仅在仍停留在该工具界面时操作 DOM）
-    bindResultImageDims(runToolId);
-
-    // 自动下载结果原图到本地（避免24小时后链接过期丢失）
-    let downloaded = 0;
-    let byServer = 0;
-    for (let idx = 0; idx < results.length; idx++) {
-      const it = results[idx];
-      if (!it.url || !(it.outputType || "").match(/png|jpe?g|webp|gif|mp4|mov/i)) continue;
-      const fname = (tool.name || "result") + "_" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")
-        + (results.length > 1 ? "_" + (idx + 1) : "") + "." + (it.outputType || "png");
-      // 本地服务模式：由 server 直接下载到已配置的下载目录，浏览器无需授权
-      if (location.protocol.startsWith("http")) {
-        try {
-          const r = await localFetch("/save-image", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url: it.url, filename: fname })
-          });
-          if (r.ok) {
-            const j = await r.json();
-            if (j && j.ok) { downloaded++; byServer++; continue; }
-          } else {
-            // 打印服务端拒绝原因，便于定位令牌/域名/网络问题
-            console.warn("服务端保存结果失败", r.status, await r.text().catch(() => ""), it.url);
-          }
-        } catch (e) { /* 旧版服务没有该接口，走下面的兜底 */ }
-      }
-      try {
-        const r = await fetch(it.url);
-        const b = await r.blob();
-        // 已设置自定义目录：静默写入，不弹任何窗口
-        if (state.dirHandle && (await state.dirHandle.queryPermission({ mode: "readwrite" })) === "granted") {
-          try { await saveToDir(state.dirHandle, fname, b); downloaded++; continue; } catch (e) {}
-        }
-        // 否则走浏览器默认下载（受浏览器下载设置控制）
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(b);
-        a.download = fname;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(a.href), 5000);  // 延迟回收，避免下载未开始就被释放
-        downloaded++;
-      } catch (e) { /* 自动下载失败时仍可点页面上的下载按钮 */ }
-    }
-    // 运行成功后补全下拉选项：配置时只填一个默认值也会自动拉取完整候选列表
-    let optionTip = "";
-    try {
-      const filled = await enrichSelectOptions(tool);
-      if (filled) {
-        saveTools();
-        if (state.activeId === runToolId) refreshSelectOptions(tool);
-        try {
-          await persistTool(tool);
-        } catch (e) { /* 写目录失败时 localStorage 已更新 */ }
-        optionTip = "；已自动补全 " + filled + " 个下拉列表的选项";
-      }
-    } catch (e) { /* 工作流接口可能不支持拉取，失败不影响本次结果 */ }
-
-    // 组装扣费信息
-    let costText = "✅ 生成完成！共 " + results.length + " 个输出";
-    if (downloaded) costText += "，已自动保存 " + downloaded + " 个文件到「" + (byServer ? "下载目录" : (state.dirHandle ? state.dirHandle.name : "浏览器下载目录")) + "」";
-    if (usage && (usage.consumeMoney || usage.consumeCoins || usage.taskCostTime)) {
-      const parts = [];
-      if (usage.taskCostTime) parts.push("耗时 " + usage.taskCostTime + " 秒");
-      if (usage.consumeMoney && usage.consumeMoney !== "0") parts.push("扣费 ¥" + usage.consumeMoney);
-      if (usage.consumeCoins && usage.consumeCoins !== "0") parts.push("消耗 " + usage.consumeCoins + " RH币");
-      if (parts.length) costText += "（" + parts.join("，") + "）";
-    }
-    showStatus(costText + optionTip + "。链接24小时内有效，请及时下载", "success");
+  runStatus(run, "🚀 正在创建任务…");
+  let taskId;
+  try {
+    taskId = await createTask(task.tool, nodeInfoList, run.abort.signal);
   } catch (err) {
-    // 用户主动取消（上传/提交阶段被中断）：静默收尾，不显示成错误
-    if (err.name === "AbortError" || run.cancelled) {
-      showStatus("⏹ 已取消", "");
-      showResultNotice(runToolId, '<div class="result-placeholder">已取消</div>');
-      return;
-    }
-    showStatus("❌ " + err.message, "error");
-    showResultNotice(runToolId, '<div class="result-placeholder">生成失败</div>');
-  } finally {
-    const cur = activeTool();
-    // 只允许本次运行清理自己的上下文，避免异步收尾误清除其它运行状态。
-    if (state.currentRun === run) {
-      state.currentRun = null;
-      state.runningToolId = null;
-      cancelBtn.style.display = "none";
-    }
-    runBtn.disabled = !!state.currentRun || !!(cur && cur.deleted);
-    refreshToolItemStates();  // 运行结束：黄色高亮转为"最近完成"或恢复默认
+    // 网络中断时提交结果未知，必须暂停列队，避免重复提交
+    if (/无法连接|Failed to fetch|NetworkError|网络/i.test(err && err.message || "")) err.remoteUncertain = true;
+    throw err;
+  }
+  // 任务已提交成功但用户此刻点了取消：需要同时通知服务端停止，避免继续扣费
+  if (run.cancelled) {
+    try { await cancelTask(taskId); } catch (e) {}
+    return { cancelled: true, results: [], usage: {} };
+  }
+
+  run.taskId = taskId;
+  runStatus(run, "⏳ 任务运行中（taskId: " + taskId + "）…");
+  try {
+    return await waitTask(taskId, run, (s, i) => {
+      runStatus(run, "⏳ 任务状态：" + (s || "未知") + "（已等待 " + (i * 3 + 3) + " 秒）");
+    });
+  } catch (err) {
+    // 只有远端明确报告任务失败才可安全续跑；查询网络错误和超时状态未知
+    if (!/^任务执行失败：/.test(err && err.message || "")) err.remoteUncertain = true;
+    throw err;
   }
 }
 
-// 立即取消：上传阶段直接中断网络请求；已创建任务时再通知 RunningHub 停止
+// 输出展示、自动下载与下拉补全独立后台执行，不阻塞本地 FIFO 的下一项远端提交
+async function processResults(run, results, usage) {
+  const task = run.task;
+  appendResultBatch(task.toolId, buildResultHtml(results));
+  bindResultImageDims(task.toolId);
+
+  // 自动下载结果原图到本地（避免24小时后链接过期丢失）
+  let downloaded = 0;
+  let byServer = 0;
+  for (let idx = 0; idx < results.length; idx++) {
+    const it = results[idx];
+    if (!it.url || !(it.outputType || "").match(/png|jpe?g|webp|gif|mp4|mov/i)) continue;
+    const fname = task.toolName + "_" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")
+      + (results.length > 1 ? "_" + (idx + 1) : "") + "." + (it.outputType || "png");
+    // 本地服务模式：由 server 直接下载到已配置的下载目录，浏览器无需授权
+    if (location.protocol.startsWith("http")) {
+      try {
+        const r = await localFetch("/save-image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: it.url, filename: fname })
+        });
+        if (r.ok) {
+          const j = await r.json();
+          if (j && j.ok) { downloaded++; byServer++; continue; }
+        } else {
+          // 打印服务端拒绝原因，便于定位令牌/域名/网络问题
+          console.warn("服务端保存结果失败", r.status, await r.text().catch(() => ""), it.url);
+        }
+      } catch (e) { /* 旧版服务没有该接口，走下面的兜底 */ }
+    }
+    try {
+      const b = await (await fetch(it.url)).blob();
+      // 已设置自定义目录：静默写入，不弹任何窗口
+      if (state.dirHandle && (await state.dirHandle.queryPermission({ mode: "readwrite" })) === "granted") {
+        try { await saveToDir(state.dirHandle, fname, b); downloaded++; continue; } catch (e) {}
+      }
+      // 否则走浏览器默认下载（受浏览器下载设置控制）
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(b);
+      a.download = fname;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);  // 延迟回收，避免下载未开始就被释放
+      downloaded++;
+    } catch (e) { /* 自动下载失败时仍可点页面上的下载按钮 */ }
+  }
+
+  // 运行成功后补全下拉选项：配置时只填一个默认值也会自动拉取完整候选列表
+  let optionTip = "";
+  const live = state.tools.find(t => t.id === task.toolId);
+  if (live && !live.deleted) {
+    try {
+      const filled = await enrichSelectOptions(live);
+      if (filled) {
+        saveTools();
+        if (state.activeId === live.id) refreshSelectOptions(live);
+        try {
+          await persistTool(live);
+        } catch (e) { /* 写目录失败时 localStorage 已更新 */ }
+        optionTip = "；已自动补全 " + filled + " 个下拉列表的选项";
+      }
+    } catch (e) { /* 接口可能不支持拉取，失败不影响本次结果 */ }
+  }
+
+  // 组装扣费信息
+  let costText = "✅ 生成完成！共 " + results.length + " 个输出";
+  if (downloaded) costText += "，已自动保存 " + downloaded + " 个文件到「" + (byServer ? "下载目录" : (state.dirHandle ? state.dirHandle.name : "浏览器下载目录")) + "」";
+  if (usage && (usage.consumeMoney || usage.consumeCoins || usage.taskCostTime)) {
+    const parts = [];
+    if (usage.taskCostTime) parts.push("耗时 " + usage.taskCostTime + " 秒");
+    if (usage.consumeMoney && usage.consumeMoney !== "0") parts.push("扣费 ¥" + usage.consumeMoney);
+    if (usage.consumeCoins && usage.consumeCoins !== "0") parts.push("消耗 " + usage.consumeCoins + " RH币");
+    if (parts.length) costText += "（" + parts.join("，") + "）";
+  }
+  runStatus(run, costText + optionTip + "。链接24小时内有效，请及时下载", "success");
+}
+
+function finishCancelled(run) {
+  runStatus(run, "⏹ 已取消", "");
+  showResultNotice(run.task.toolId, '<div class="result-placeholder">已取消</div>');
+}
+
+// 唯一 FIFO 消费器：远端明确完成后先续跑，下载与结果处理在后台并行完成
+async function pumpRunQueue() {
+  if (queuePumping) return;
+  queuePumping = true;
+  try {
+    while (state.runQueue.length && !state.runQueuePaused) {
+      const task = state.runQueue.shift();
+      const run = {
+        id: ++runSerial,
+        task,
+        taskId: null,
+        cancelled: false,
+        paused: false,
+        abort: new AbortController()
+      };
+      statusOwner = run.id;
+      state.currentRun = run;
+      state.runningToolId = task.toolId;
+      state.lastDoneToolId = null;
+      saveLastDone();
+      notifyToolStatus();
+
+      try {
+        const result = await executeRemote(run);
+        if (result.cancelled) {
+          finishCancelled(run);
+        } else {
+          state.lastDoneToolId = task.toolId;
+          saveLastDone();
+          processResults(run, result.results || [], result.usage || {}).catch(err => {
+            showResultNotice(task.toolId, '<div class="result-placeholder">结果处理失败</div>');
+            runStatus(run, "❌ 结果处理失败：" + err.message, "error");
+          });
+          notifyToolStatus();
+        }
+      } catch (err) {
+        if ((err && err.name === "AbortError") || run.cancelled) {
+          finishCancelled(run);
+        } else {
+          runStatus(run, "❌ " + err.message, "error");
+          showResultNotice(task.toolId, '<div class="result-placeholder">生成失败</div>');
+          if (err.remoteUncertain) {
+            run.paused = true;
+            state.runQueuePaused = true;
+            runStatus(run, "❌ " + err.message + "；远端状态未确定，本地列队已暂停，可取消当前任务后续跑", "error");
+          }
+        }
+      } finally {
+        // 暂停项需要保留身份供用户取消；其他任务按对象身份清理，避免误清下一项
+        if (!run.paused && state.currentRun === run) {
+          state.currentRun = null;
+          state.runningToolId = null;
+        }
+        notifyToolStatus();
+      }
+    }
+  } finally {
+    queuePumping = false;
+    notifyToolStatus();
+  }
+}
+
+// ================= 对外入口 =================
+export function runActiveTool() {
+  if (state.currentRun || queuePumping) return;
+  if (state.runQueuePaused) {
+    showStatus("当前任务状态未确定，请先取消当前任务", "error");
+    return;
+  }
+  const task = captureActiveTask();
+  if (!task) return;
+  state.runQueue.push(task);
+  notifyToolStatus();
+  void pumpRunQueue();
+}
+
+export function queueActiveTool() {
+  if (!state.currentRun || state.currentRun.cancelled || state.runQueuePaused) {
+    showStatus("当前没有可继续列队的运行任务", "error");
+    return;
+  }
+  const task = captureActiveTask();
+  if (!task) return;
+  state.runQueue.push(task);
+  showStatus("已加入本地列队，当前等待 " + state.runQueue.length + " 个任务");
+  notifyToolStatus();
+}
+
+export function clearQueuedRuns() {
+  const count = state.runQueue.length;
+  if (!count) return;
+  if (!window.confirm("确定清空本地列队中的 " + count + " 个待提交任务吗？\n当前正在生成的任务不受影响。")) return;
+  state.runQueue.length = 0;
+  showStatus("已清空 " + count + " 个待提交任务");
+  notifyToolStatus();
+}
+
+// 立即取消：只停止当前远端任务，本地 FIFO 保留并继续执行
 export async function cancelCurrentRun() {
-  if (!state.currentRun || state.currentRun.cancelled) return;
   const run = state.currentRun;
+  if (!run || run.cancelled) return;
+  const wasPaused = run.paused;
   run.cancelled = true;
-  document.getElementById("cancelBtn").disabled = true;
-  showStatus("⏹ 正在取消…");
+  notifyToolStatus();
+  runStatus(run, "⏹ 正在取消…");
   // 中断仍在进行的上传/提交请求，避免流量与时间浪费
-  try { run.abortCtrl && run.abortCtrl.abort(); } catch (e) {}
+  try { if (run.abort) run.abort.abort(); } catch (e) {}
   // 任务已提交到服务端时才需要通知停止
   if (run.taskId) {
     try { await cancelTask(run.taskId); } catch (e) { /* 取消失败也不影响本地停止 */ }
+  }
+  // 状态不明的暂停项已退出消费循环，需要在这里清理并重新启动后续 FIFO
+  if (wasPaused) {
+    run.paused = false;
+    state.runQueuePaused = false;
+    if (state.currentRun === run) {
+      state.currentRun = null;
+      state.runningToolId = null;
+    }
+    finishCancelled(run);
+    notifyToolStatus();
+    void pumpRunQueue();
   }
 }

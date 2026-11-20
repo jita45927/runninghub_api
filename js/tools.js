@@ -1,5 +1,6 @@
 // ================= 工具配置：导入 / 导出 / tools 目录自动扫描 =================
 import { state, saveTools, saveActiveId, tagsOf } from "./store.js";
+import { migrateSeedFields } from "./config.js";
 import { showStatus } from "./ui/form.js";
 import { localFetch } from "./api.js";
 
@@ -34,6 +35,7 @@ export function importToolFile(file, renderAll) {
         instanceType: data.instanceType || "default",
         fields: data.fields
       };
+      migrateSeedFields(merged);  // 旧的 seed 数字字段升级为随机种子字段
       if (idx >= 0) {
         state.tools[idx] = { ...merged, id: state.tools[idx].id };
         state.activeId = state.tools[idx].id;
@@ -97,6 +99,7 @@ export async function scanToolsDir(renderAll) {
       if (!t.id) t.id = "t" + Date.now() + "_" + n++;  // 配置文件没有 id 时自动补一个
       t.tags = tagsOf(t);
       delete t.category;  // 旧版单值分类统一迁移为标签数组
+      migrateSeedFields(t);  // 旧的 seed 数字字段升级为随机种子字段
       // 同应用ID或同名视为同一工具：以文件内容为准更新（保证 tools 目录是权威配置）
       const idx = state.tools.findIndex(x => (t.webappId && x.webappId === t.webappId) || (t.name && x.name === t.name));
       if (idx >= 0) {
@@ -154,6 +157,7 @@ export async function loadToolsFromDir(renderAll) {
       // 同应用ID或同名视为同一工具：以文件内容为准更新，并记住 id → 文件名映射
       t.tags = tagsOf(t);
       delete t.category;  // 旧版单值分类统一迁移为标签数组
+      migrateSeedFields(t);  // 旧的 seed 数字字段升级为随机种子字段
       const idx = state.tools.findIndex(x => (t.webappId && x.webappId === t.webappId) || (t.name && x.name === t.name));
       if (idx >= 0) { t.id = state.tools[idx].id; state.tools[idx] = t; }
       else { t.id = "t" + Date.now() + "_" + n++; state.tools.push(t); }

@@ -17,8 +17,24 @@ export const FIELD_TYPES = {
   textarea: "多行文本",
   text:     "单行文本",
   number:   "数字",
-  select:   "下拉选择"
+  select:   "下拉选择",
+  seed:     "随机种子"
 };
+
+// 旧配置里把种子配成了普通数字字段，只能提交固定值。
+// 这里在加载时自动升级为「随机种子」类型，使其具备固定/递增/递减/随机四种模式。
+// 仅在内存中升级；写回磁盘由用户保存配置触发，不强制改写配置文件。
+export function migrateSeedFields(t) {
+  if (!t || !Array.isArray(t.fields)) return false;
+  let changed = false;
+  t.fields.forEach(f => {
+    if (f && f.type === "number" && String(f.fieldName || "").trim().toLowerCase() === "seed") {
+      f.type = "seed";
+      changed = true;
+    }
+  });
+  return changed;
+}
 
 // 工具图标可选项（配置弹窗下拉）
 export const ICON_OPTIONS = ["🖼️","🎨","✨","🔍","⬆️","📐","🏞️","🌆","🏗️","🧱","🪄","✂️","🎞️","🖌️","📸","👤","💡","🌟","🎯","🧩"];

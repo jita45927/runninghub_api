@@ -25,6 +25,7 @@ const baseKey = idx => (activeTool() ? activeTool().id : "tool") + "_" + idx;
 
 // 参数值的存储键：nodeId + 字段名（配置改动后仍能对应上，不用下标）
 const fieldKey = f => String(f.nodeId || "") + "|" + String(f.fieldName || "");
+export function fieldKeyOf(f) { return fieldKey(f); }
 
 // 取某字段上次填写的值；没有记录时用传入的默认值
 function savedFieldValue(t, f, fallback) {
@@ -33,11 +34,50 @@ function savedFieldValue(t, f, fallback) {
   return v === undefined ? fallback : v;
 }
 
+// 取某字段的附加状态（如随机种子的模式），suffix 区分不同附加项
+function savedFieldExtra(t, f, suffix, fallback) {
+  const bucket = state.fieldValuesByTool[t.id];
+  const v = bucket ? bucket[fieldKey(f) + suffix] : undefined;
+  return v === undefined ? fallback : v;
+}
+
+// runner 在点击生成/列队时会推进随机种子基准值，需写回内存态供下次使用
+export function writeFieldValue(t, f, value, suffix = "") {
+  if (!t) return;
+  const bucket = state.fieldValuesByTool[t.id] || (state.fieldValuesByTool[t.id] = {});
+  bucket[fieldKey(f) + suffix] = value;
+}
+
 // ================= 状态栏 =================
 export function showStatus(text, type) {
   const statusBar = document.getElementById("statusBar");
   statusBar.className = "status-bar show" + (type ? " " + type : "");
   statusBar.textContent = text;
+}
+
+// 运行相关按钮只更新自身状态，不重建表单，避免打断用户输入
+export function syncRunControls() {
+  const t = activeTool();
+  const trashed = !!(t && t.deleted);
+  const running = !!state.currentRun;
+  const waiting = state.runQueue.length;
+  const runBtn = document.getElementById("runBtn");
+  const queueBtn = document.getElementById("queueBtn");
+  const clearQueueBtn = document.getElementById("clearQueueBtn");
+  const cancelBtn = document.getElementById("cancelBtn");
+  if (runBtn) runBtn.disabled = trashed || running || state.runQueuePaused;
+  if (queueBtn) {
+    queueBtn.disabled = !running || state.currentRun.cancelled || state.runQueuePaused || !t || trashed || !(t.webappId || t.workflow);
+    queueBtn.textContent = "进入列队" + (waiting ? "（" + waiting + "）" : "");
+  }
+  if (clearQueueBtn) {
+    clearQueueBtn.disabled = !waiting;
+    clearQueueBtn.textContent = "清空列队" + (waiting ? "（" + waiting + "）" : "");
+  }
+  if (cancelBtn) {
+    cancelBtn.style.display = running ? "" : "none";
+    cancelBtn.disabled = !running || state.currentRun.cancelled;
+  }
 }
 
 // ================= 工作区：按字段配置动态生成表单 =================
@@ -77,9 +117,7 @@ export function renderWorkspace() {
   const trashed = !!(t && t.deleted);
   notice.style.display = trashed ? "" : "none";
   notice.textContent = "🗑 该工具在回收站中：可以查看配置，但不能运行。点击左侧条目上的 ↩ 可还原。";
-  const runBtn = document.getElementById("runBtn");
-  // 当前版本一次只允许一个任务；切换工具不得重新启用运行按钮。
-  if (runBtn) runBtn.disabled = trashed || !!state.currentRun;
+  syncRunControls();
 
   if (!t || !t.fields || !t.fields.length) {
     form.innerHTML = '<div style="color:#4a5470;font-size:13px;padding:8px 0">此工具还没有输入项，点右上角「配置此工具」添加。</div>';
@@ -90,7 +128,7 @@ export function renderWorkspace() {
     const span = (f.type === "textarea" || f.type === "image") ? " span2" : "";
     // 应用注册的自定义类型优先
     const custom = customRenderers.get(f.type);
-    if (custom) return custom({ t, f, i, span, value: savedFieldValue(t, f, ""), saved: fb => savedFieldValue(t, f, fb) });
+    if (custom) return custom({ t, f, i, span, value: savedFieldValue(t, f, ""), saved: fb => savedFieldValue(t, f, fb), savedMode: fb => savedFieldExtra(t, f, "|mode", fb) });
     if (f.type === "image") {
       return `<div class="field${span}">
         <label>${esc(f.label)}</label>
@@ -147,11 +185,15 @@ export function renderWorkspace() {
   // 记录参数改动：按工具隔离保留，切换工具后恢复；
   // 只存内存，不写 localStorage，重启/刷新程序后回到配置默认值
   const persistField = el => {
-    if (!el || !el.id || el.id.indexOf("ff_") !== 0) return;
+    if (!el || !el.id) return;
+    const isValue = el.id.indexOf("ff_") === 0;   // ff_<i>：字段主值（含随机种子的基准值）
+    const isMode = el.id.indexOf("fm_") === 0;    // fm_<i>：字段附加模式（如随机种子模式）
+    if (!isValue && !isMode) return;
     const f = t.fields[Number(el.id.slice(3))];
-    if (!f || f.type === "image") return;
+    if (!f) return;
+    if (isValue && f.type === "image") return;
     const bucket = state.fieldValuesByTool[t.id] || (state.fieldValuesByTool[t.id] = {});
-    bucket[fieldKey(f)] = el.value;
+    bucket[fieldKey(f) + (isMode ? "|mode" : "")] = el.value;
   };
   form.oninput = e => persistField(e.target);
   form.onchange = e => persistField(e.target);

@@ -526,3 +526,8 @@ label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px
 }
 .guide-shot-media img { display: block; max-width: 100%; max-height: 56vh; object-fit: contain; }
 .guide-shot .guide-actions { margin-top: 0; padding: 0 16px 16px; }
+
+/* 随机种子：基准值数字框 + 模式下拉 并排 */
+.seed-field { display: flex; gap: 8px; align-items: center; }
+.seed-field input[type=number] { flex: 1; min-width: 0; }
+.seed-field select { flex: 0 0 112px; width: 112px; }
