@@ -1,0 +1,51 @@
+{
+  "type": "runninghub-tool-config",
+  "version": 1,
+  "name": "局部重绘编辑（支持参考图）",
+  "icon": "🖌️",
+  "desc": "上传原图并可额外上传参考图（缺省为单图编辑），按提示词对局部进行重绘；可调整重绘画幅与遮罩外扩倍数",
+  "sourceUrl": "",
+  "toolType": "app",
+  "webappId": "2124168070439727105",
+  "instanceType": "default",
+  "tags": [
+    "图片编辑"
+  ],
+  "fields": [
+    {
+      "label": "上传原图",
+      "type": "image",
+      "nodeId": "317",
+      "fieldName": "image",
+      "def": ""
+    },
+    {
+      "label": "上传参考图（缺省为单图编辑）",
+      "type": "image",
+      "nodeId": "400",
+      "fieldName": "image",
+      "def": ""
+    },
+    {
+      "label": "提示词",
+      "type": "textarea",
+      "nodeId": "370",
+      "fieldName": "text",
+      "def": "女孩戴着图2的眼镜眼镜，女孩皮肤变粗糙"
+    },
+    {
+      "label": "重绘画幅",
+      "type": "number",
+      "nodeId": "410",
+      "fieldName": "value",
+      "def": "1536"
+    },
+    {
+      "label": "遮罩外扩倍数",
+      "type": "number",
+      "nodeId": "382",
+      "fieldName": "value",
+      "def": "1.5"
+    }
+  ]
+}
