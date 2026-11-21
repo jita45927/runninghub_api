@@ -3,10 +3,10 @@
   "version": 1,
   "name": "KLEIN-单图编辑（可绘蒙版）",
   "icon": "🖌️",
-  "desc": "上传单张图片按提示词编辑（FLUX.2 Klein）；可手绘蒙版，并控制是否把蒙版涂成红色叠加进图片、是否缩放输出尺寸",
+  "desc": "上传单张图片按提示词编辑（FLUX.2 Klein）；可手绘蒙版，并控制是否把蒙版涂成红色叠加进图片、是否按百万像素重设输出尺寸",
   "sourceUrl": "https://www.runninghub.cn/ai-detail/2120188011848753153",
-  "toolType": "workflow",
-  "webappId": "2120165223045877761",
+  "toolType": "app",
+  "webappId": "2120188011848753153",
   "instanceType": "default",
   "tags": [
     "图片编辑"
@@ -24,35 +24,28 @@
       "type": "textarea",
       "nodeId": "167",
       "fieldName": "text",
-      "def": "去掉红色变成黑色胡子，"
+      "def": "去掉红色区域变成络腮胡子"
     },
     {
-      "label": "随机种子（-1 每次随机）",
-      "type": "number",
-      "nodeId": "152",
-      "fieldName": "seed",
-      "def": "-1"
-    },
-    {
-      "label": "是否调整输出图片尺寸",
+      "label": "是否将遮罩填充为红色",
       "type": "select",
-      "nodeId": "166",
-      "fieldName": "value",
-      "def": "true,false"
-    },
-    {
-      "label": "输出图片短边尺寸调整为",
-      "type": "number",
-      "nodeId": "172",
-      "fieldName": "size",
-      "def": "1024"
-    },
-    {
-      "label": "是否强制填充遮罩为红色",
-      "type": "select",
-      "nodeId": "174",
+      "nodeId": "196",
       "fieldName": "value",
       "def": "false,true"
+    },
+    {
+      "label": "是否重设出图尺寸",
+      "type": "select",
+      "nodeId": "198",
+      "fieldName": "value",
+      "def": "false,true"
+    },
+    {
+      "label": "重设出图尺寸（百万像素，1=1K，2=2K）",
+      "type": "number",
+      "nodeId": "200",
+      "fieldName": "value",
+      "def": "1"
     }
   ]
 }

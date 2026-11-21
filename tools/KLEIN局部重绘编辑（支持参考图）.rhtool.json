@@ -1,7 +1,7 @@
 {
   "type": "runninghub-tool-config",
   "version": 1,
-  "name": "局部重绘编辑（支持参考图）",
+  "name": "KLEIN局部重绘编辑（支持参考图）",
   "icon": "🖌️",
   "desc": "上传原图并可额外上传参考图（缺省为单图编辑），按提示词对局部进行重绘；可调整重绘画幅与遮罩外扩倍数",
   "sourceUrl": "",
