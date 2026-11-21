@@ -3,7 +3,7 @@
   "version": 1,
   "name": "KLEIN局部重绘编辑（支持参考图）",
   "icon": "🖌️",
-  "desc": "上传原图并可额外上传参考图（缺省为单图编辑），按提示词对局部进行重绘；可调整重绘画幅与遮罩外扩倍数",
+  "desc": "上传原图与参考图，按提示词对局部进行重绘；可开关双图编辑，并调整重绘区域像素与遮罩区域扩大倍数",
   "sourceUrl": "",
   "toolType": "app",
   "webappId": "2124168070439727105",
@@ -13,18 +13,39 @@
   ],
   "fields": [
     {
-      "label": "上传原图",
+      "label": "上传图片",
       "type": "image",
       "nodeId": "317",
       "fieldName": "image",
       "def": ""
     },
     {
-      "label": "上传参考图（缺省为单图编辑）",
+      "label": "参考图片",
       "type": "image",
-      "nodeId": "400",
+      "nodeId": "412",
       "fieldName": "image",
       "def": ""
+    },
+    {
+      "label": "是否打开双图编辑",
+      "type": "select",
+      "nodeId": "414",
+      "fieldName": "value",
+      "def": "true,false"
+    },
+    {
+      "label": "遮罩区域扩大倍数",
+      "type": "number",
+      "nodeId": "382",
+      "fieldName": "value",
+      "def": "1.5"
+    },
+    {
+      "label": "重绘区域像素",
+      "type": "number",
+      "nodeId": "410",
+      "fieldName": "value",
+      "def": "1536"
     },
     {
       "label": "提示词",
@@ -32,20 +53,6 @@
       "nodeId": "370",
       "fieldName": "text",
       "def": "女孩戴着图2的眼镜眼镜，女孩皮肤变粗糙"
-    },
-    {
-      "label": "重绘画幅",
-      "type": "number",
-      "nodeId": "410",
-      "fieldName": "value",
-      "def": "1536"
-    },
-    {
-      "label": "遮罩外扩倍数",
-      "type": "number",
-      "nodeId": "382",
-      "fieldName": "value",
-      "def": "1.5"
     }
   ]
 }
