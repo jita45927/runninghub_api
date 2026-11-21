@@ -24,6 +24,10 @@ async function fetchAppinfo() {
     if (r.ok) {
       const j = await r.json();
       setLocalToken(j.token);
+      if (j.version) {
+        const verEl = document.getElementById("appVersion");
+        if (verEl) verEl.textContent = "v" + j.version;
+      }
       return { tools: j.tools || "", download: j.download || "", session: j.session || "" };
     }
   } catch (e) { /* 非 server 模式，继续尝试静态文件 */ }

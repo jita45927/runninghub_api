@@ -3,7 +3,10 @@
 ; 产物：installer\RunningHub-AI-Toolbox-Setup-<版本>.exe
 
 #define MyAppName "RunningHub AI 设计师工具箱"
-#define MyAppVersion "1.0.0"
+; 正式构建由 打包安装包.bat 从 server.py 的 APP_VERSION 传入 /DMyAppVersion，此处仅作手动编译兜底
+#ifndef MyAppVersion
+  #define MyAppVersion "1.0.1"
+#endif
 #define MyAppPublisher "RunningHub AI"
 #define MyAppExeName "RunningHubToolbox.exe"
 

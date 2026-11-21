@@ -23,6 +23,7 @@ def _data_dir():
 
 
 os.chdir(_app_dir())
+APP_VERSION = "1.0.1"  # 版本号唯一来源：打包脚本与界面均读取此处
 DATA_DIR = _data_dir()
 os.makedirs(DATA_DIR, exist_ok=True)
 APPINFO = os.path.join(DATA_DIR, "appinfo.txt")
@@ -675,6 +676,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         info = _load_appinfo()
         info["session"] = SESSION_ID
         info["token"] = ACCESS_TOKEN
+        info["version"] = APP_VERSION
         body = json.dumps(info, ensure_ascii=False).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")

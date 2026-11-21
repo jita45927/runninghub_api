@@ -23,7 +23,19 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo [2/5] 安装并校验构建依赖 ...
+echo [2/5] 读取版本号并安装校验构建依赖 ...
+rem 版本号唯一来源：server.py 的 APP_VERSION
+del /q "%TEMP%\rh_version.txt" 2>nul
+python -c "import re;print(re.search('APP_VERSION = .([0-9.]+).',open('server.py',encoding='utf-8').read()).group(1))" > "%TEMP%\rh_version.txt"
+set /p APP_VER=<"%TEMP%\rh_version.txt"
+del /q "%TEMP%\rh_version.txt" 2>nul
+if not defined APP_VER (
+  echo [错误] 无法从 server.py 读取 APP_VERSION。
+  pause
+  exit /b 1
+)
+echo    当前版本：%APP_VER%
+
 python -m pip install --disable-pip-version-check -r requirements-build.txt
 if errorlevel 1 (
   echo [错误] 依赖安装失败，请检查网络或依赖版本。
@@ -75,19 +87,19 @@ if not exist "%ISCC%" (
 )
 
 echo [5/5] 生成安装包 ...
-"%ISCC%" installer.iss
+"%ISCC%" "/DMyAppVersion=%APP_VER%" installer.iss
 if errorlevel 1 (
   echo [错误] 安装包生成失败。
   pause
   exit /b 1
 )
-if not exist "installer\RunningHub-AI-Toolbox-Setup-1.0.0.exe" (
+if not exist "installer\RunningHub-AI-Toolbox-Setup-%APP_VER%.exe" (
   echo [错误] 编译结束但未找到安装包。
   pause
   exit /b 1
 )
 
 echo.
-echo 完成：installer\RunningHub-AI-Toolbox-Setup-1.0.0.exe
+echo 完成：installer\RunningHub-AI-Toolbox-Setup-%APP_VER%.exe
 pause
 endlocal
