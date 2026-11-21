@@ -15,7 +15,7 @@ const SEED_MODES = [
 registerFieldType("seed",
   ({ t, f, i, span, saved, savedMode }) => {
     const current = saved(f.def || "");
-    const mode = savedMode("random");
+    const mode = savedMode(f.defMode || "random");
     const opts = SEED_MODES.map(m =>
       `<option value="${m.v}"${m.v === mode ? " selected" : ""}>${esc(m.label)}</option>`
     ).join("");

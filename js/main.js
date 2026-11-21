@@ -1,5 +1,5 @@
 // ================= 入口：初始化、事件绑定、模块装配 =================
-import { state, idbGet, idbSet } from "./store.js";
+import { state, activeTool, saveTools, idbGet, idbSet } from "./store.js";
 import { renderToolList, refreshToolItemStates } from "./ui/toollist.js";
 import { renderWorkspace, showStatus, syncRunControls } from "./ui/form.js";
 import "./ui/fieldtypes.js";  // 注册 RunningHub 专属字段类型（随机种子）
@@ -8,7 +8,7 @@ import { renderHome, showHomeView, showWorkView, setToolSearch } from "./ui/home
 import { initLightbox } from "./ui/lightbox.js";
 import { initModals, initSetupWizard } from "./ui/modal.js";
 import { appPanel, refreshKeyBtn } from "./ui/panels.js";
-import { scanToolsDir, loadToolsFromDir, toolsDirGranted, resetToolsCache } from "./tools.js";
+import { scanToolsDir, loadToolsFromDir, toolsDirGranted, resetToolsCache, persistTool } from "./tools.js";
 import { runActiveTool, queueActiveTool, cancelCurrentRun, clearQueuedRuns, restoreResultsSession } from "./runner.js";
 import { localFetch, setLocalToken } from "./api.js";
 
@@ -250,7 +250,56 @@ function initExternalLinks() {
   }, true);
 }
 
+// ================= 把当前面板参数保存为工具默认值 =================
+async function saveCurrentDefaults() {
+  const t = activeTool();
+  if (!t) { showStatus("请先选择一个工具", "error"); return; }
+  const btn = document.getElementById("saveDefaultsBtn");
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "保存中…";
+  try {
+    let count = 0;
+    let skippedImages = 0;
+    (t.fields || []).forEach((f, i) => {
+      if (f.type === "image") { skippedImages++; return; }  // File 对象不写入 JSON 配置
+      const el = document.getElementById("ff_" + i);
+      if (!el) return;
+      const value = el.value;
+      if (f.type === "select") {
+        // def 同时保存候选列表：当前项移到首位成为默认值，其余选项保持原顺序
+        const options = String(f.def || "").split(",").map(v => v.trim()).filter(Boolean);
+        f.def = value ? [value, ...options.filter(v => v !== value)].join(",") : options.join(",");
+      } else {
+        f.def = value;
+      }
+      if (f.type === "seed") {
+        const modeEl = document.getElementById("fm_" + i);
+        if (modeEl) f.defMode = modeEl.value;
+      }
+      count++;
+    });
+    if (!count) { showStatus("当前工具没有可保存的参数", "error"); return; }
+
+    saveTools();
+    delete state.fieldValuesByTool[t.id];  // 清除旧的临时值，刷新后直接读取新默认值
+    const fn = await persistTool(t);
+    if (!fn) {
+      showStatus("默认值已更新，但未能写入配置文件，请检查初始设置中的工具配置目录", "error");
+      return;
+    }
+    showStatus("已保存 " + count + " 项参数为「" + t.name + "」的默认值"
+      + (skippedImages ? "（图片除外）" : "") + "：tools/" + fn, "success");
+  } catch (err) {
+    showStatus("保存默认值失败：" + err.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+
 // ================= 初始化 =================
+document.getElementById("saveDefaultsBtn").onclick = saveCurrentDefaults;
 document.getElementById("runBtn").onclick = runActiveTool;
 document.getElementById("queueBtn").onclick = queueActiveTool;
 document.getElementById("cancelBtn").onclick = cancelCurrentRun;

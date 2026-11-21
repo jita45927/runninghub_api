@@ -162,6 +162,7 @@ body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: va
 /* 右侧工作区 */
 .workspace { flex: 1; overflow-y: auto; padding: 24px; }
 .ws-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.ws-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .ws-title { display: flex; align-items: center; gap: 14px; }
 .ws-title .big-icon { font-size: 30px; }
 .ws-title h2 { font-size: 20px; display: flex; align-items: center; gap: 10px; }
