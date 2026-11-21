@@ -3,6 +3,7 @@
 #   /appinfo            → 返回 {tools, download, session, token}，会话与令牌每次启动都不同
 #   /open-dir?path=...  → 调起 Windows 资源管理器打开指定目录
 #   /pick-download-dir  → 弹系统 FolderBrowserDialog 让用户选下载目录，写回 appinfo.txt 第二行
+#   /downloads/<文件名> → 只读提供下载目录中的结果文件（支持 Range，供结果区本地预览）
 import http.server, os, sys, json, locale, subprocess, shlex, uuid, re, urllib.request, threading, webbrowser, time
 import hmac, ipaddress, socket, html
 from urllib.parse import urlparse, parse_qs, unquote, quote
@@ -328,6 +329,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self._handle_pick_download_dir(parse_qs(parsed.query))
         elif parsed.path == "/tools" or parsed.path.startswith("/tools/"):
             self._handle_tools_static(parsed)
+        elif parsed.path.startswith("/downloads/"):
+            self._handle_downloads_static(parsed)
         else:
             super().do_GET()
 
@@ -337,6 +340,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/tools" or parsed.path.startswith("/tools/"):
             self._handle_tools_static(parsed, head_only=True)
+        elif parsed.path.startswith("/downloads/"):
+            self._handle_downloads_static(parsed, head_only=True)
         else:
             super().do_HEAD()
 
@@ -436,6 +441,73 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         if not head_only:
             self.wfile.write(data)
+
+    def _parse_byte_range(self, size):
+        """解析单段 Range；返回 (start, end)、None（未请求）或 "invalid"。"""
+        raw = (self.headers.get("Range") or "").strip()
+        m = re.match(r"^bytes=(\d*)-(\d*)$", raw)
+        if not m:
+            return None
+        start_s, end_s = m.group(1), m.group(2)
+        if start_s == "" and end_s == "":
+            return None
+        if start_s == "":
+            n = int(end_s)  # 后缀范围：最后 n 字节
+            if n <= 0 or size == 0:
+                return "invalid"
+            return max(0, size - n), size - 1
+        start = int(start_s)
+        end = int(end_s) if end_s else size - 1
+        if size == 0 or start >= size or end < start:
+            return "invalid"
+        return start, min(end, size - 1)
+
+    def _handle_downloads_static(self, parsed, head_only=False):
+        """只读暴露下载目录里的结果文件；支持 Range，浏览器视频才能拖动进度。
+        仅接受下载目录内的安全文件名，阻断目录穿越。"""
+        name = unquote(parsed.path[len("/downloads/"):])
+        if (not name or name != _safe_filename(name, "") or "/" in name or "\\" in name):
+            self.send_error(404, "File not found")
+            return
+        path = os.path.join(_download_dir(), name)
+        if not os.path.isfile(path):
+            self.send_error(404, "File not found")
+            return
+        try:
+            size = os.path.getsize(path)
+        except OSError:
+            self.send_error(404, "File not found")
+            return
+        rng = self._parse_byte_range(size)
+        if rng == "invalid":
+            self.send_response(416)
+            self.send_header("Content-Range", "bytes */%d" % size)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        start, end = (0, size - 1) if rng is None else rng
+        length = max(0, end - start + 1)
+        self.send_response(206 if rng is not None else 200)
+        self.send_header("Content-Type", self.guess_type(path))
+        self.send_header("Content-Length", str(length))
+        self.send_header("Accept-Ranges", "bytes")
+        if rng is not None:
+            self.send_header("Content-Range", "bytes %d-%d/%d" % (start, end, size))
+        self.end_headers()
+        if head_only:
+            return
+        try:
+            with open(path, "rb") as f:
+                f.seek(start)
+                remaining = length
+                while remaining > 0:
+                    chunk = f.read(min(65536, remaining))
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    remaining -= len(chunk)
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # 浏览器中途取消（切换图片/关闭）时属正常断开
 
     def _handle_save_cover(self, qs):
         """保存封面：body 为图片二进制，name 为基名，按 PNG 魔数决定扩展名。"""
@@ -594,7 +666,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 data = r.read()
             with open(path, "wb") as f:
                 f.write(data)
-            self._send_json(200, {"ok": True, "path": path, "size": len(data)})
+            self._send_json(200, {"ok": True, "path": path, "size": len(data),
+                                  "url": "/downloads/" + quote(fname)})
         except Exception as e:
             self._send_json(500, {"ok": False, "error": str(e)})
 

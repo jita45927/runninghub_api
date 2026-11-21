@@ -3,6 +3,7 @@
 import { esc } from "../config.js";
 import { state, activeTool, idbSet } from "../store.js";
 import { openLightbox, previewUrlFor } from "./lightbox.js";
+import { bindLocalFallback } from "./results.js";
 import { openMaskEditor, clearMaskCache } from "./maskeditor.js";
 
 // ================= 自定义字段类型扩展点 =================
@@ -201,6 +202,7 @@ export function renderWorkspace() {
   // 恢复当前工具自己的生成结果（各工具结果互相隔离）
   document.getElementById("resultArea").innerHTML =
     state.toolResults[t.id] || '<div class="result-placeholder">生成的内容会显示在这里</div>';
+  bindLocalFallback();  // 本地文件已被删除时回退远端地址
 
   // 恢复已选图片的预览（含尺寸）
   t.fields.forEach((f, i) => {

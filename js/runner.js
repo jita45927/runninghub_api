@@ -2,7 +2,7 @@
 import { state, activeTool, saveToDir, saveLastDone, saveTools } from "./store.js";
 import { apiKey, uploadImage, createTask, queryTask, cancelTask, enrichSelectOptions, localFetch } from "./api.js";
 import { showStatus, writeFieldValue, refreshSelectOptions } from "./ui/form.js";
-import { buildResultHtml, bindResultImageDims } from "./ui/results.js";
+import { buildResultHtml, bindResultImageDims, bindLocalFallback } from "./ui/results.js";
 import { refreshToolItemStates } from "./ui/toollist.js";
 import { persistTool } from "./tools.js";
 
@@ -219,11 +219,51 @@ async function executeRemote(run) {
   }
 }
 
+// 保存成功后的本地地址替换：按 data-item-key 只改目标结果项，其他批次不受影响。
+// 预览先显示远端 URL，下载完成后静默切到本地 /downloads/，不再受远端 24 小时过期影响。
+function useLocalResultUrl(toolId, itemKey, localUrl) {
+  const apply = item => {
+    if (!item || item.dataset.local) return;
+    const img = item.querySelector("img");
+    const video = item.querySelector("video");
+    if (img) img.src = localUrl;
+    if (video) {
+      // 保持播放进度与播放状态，避免切换瞬间跳回开头
+      const at = video.currentTime;
+      const wasPlaying = !video.paused;
+      video.src = localUrl;
+      video.addEventListener("loadedmetadata", () => {
+        if (at > 0) { try { video.currentTime = at; } catch (e) {} }
+        if (wasPlaying) { const p = video.play(); if (p && p.catch) p.catch(() => {}); }
+      }, { once: true });
+    }
+    const a = item.querySelector("a[download]");
+    if (a) a.href = localUrl;
+    item.dataset.local = localUrl;
+  };
+
+  const sel = '.result-item[data-item-key="' + itemKey + '"]';
+  if (state.activeId === toolId) {
+    const area = document.getElementById("resultArea");
+    apply(area ? area.querySelector(sel) : null);
+    bindLocalFallback();
+    if (area) state.toolResults[toolId] = area.innerHTML;
+  } else if (state.toolResults[toolId]) {
+    // 用户已切到其他工具：直接改存档 HTML，切回来时也是本地地址
+    const box = document.createElement("div");
+    box.innerHTML = state.toolResults[toolId];
+    apply(box.querySelector(sel));
+    state.toolResults[toolId] = box.innerHTML;
+  }
+  saveResultsSession();
+}
+
 // 输出展示、自动下载与下拉补全独立后台执行，不阻塞本地 FIFO 的下一项远端提交
 async function processResults(run, results, usage) {
   const task = run.task;
-  appendResultBatch(task.toolId, buildResultHtml(results));
+  appendResultBatch(task.toolId, buildResultHtml(results, String(run.id)));
   bindResultImageDims(task.toolId);
+  bindLocalFallback();
 
   // 自动下载结果原图到本地（避免24小时后链接过期丢失）
   let downloaded = 0;
@@ -243,7 +283,12 @@ async function processResults(run, results, usage) {
         });
         if (r.ok) {
           const j = await r.json();
-          if (j && j.ok) { downloaded++; byServer++; continue; }
+          if (j && j.ok) {
+            downloaded++; byServer++;
+            // 服务端已落盘：把该结果项静默切到本地 /downloads/ 地址
+            if (j.url) useLocalResultUrl(task.toolId, run.id + "_" + idx, j.url);
+            continue;
+          }
         } else {
           // 打印服务端拒绝原因，便于定位令牌/域名/网络问题
           console.warn("服务端保存结果失败", r.status, await r.text().catch(() => ""), it.url);

@@ -10,11 +10,13 @@ function safeUrl(u) {
 }
 
 // 把接口返回的 results 渲染为结果区 HTML：图片/视频显示预览，文本直接展示
-export function buildResultHtml(results) {
+// keyPrefix 为本批次唯一前缀，用于下载完成后按 data-item-key 精确替换为本地地址
+export function buildResultHtml(results, keyPrefix) {
   const grid = document.createElement("div");
   grid.className = "result-grid";
   let hasOutput = false;
-  for (const it of results) {
+  for (let idx = 0; idx < results.length; idx++) {
+    const it = results[idx];
     const url = safeUrl(it.url);
     const type = String(it.outputType || "");
     const isVideo = /video/i.test(type) || VIDEO_RE.test(url);
@@ -22,6 +24,8 @@ export function buildResultHtml(results) {
       hasOutput = true;
       const item = document.createElement("div");
       item.className = "result-item";
+      if (keyPrefix) item.dataset.itemKey = keyPrefix + "_" + idx;
+      item.dataset.remote = url;  // 本地文件缺失时回退用
       const a = document.createElement("a");
       a.href = url; a.target = "_blank"; a.rel = "noopener"; a.download = "";
       a.textContent = "下载";
@@ -72,5 +76,22 @@ export function bindResultImageDims(runToolId) {
       state.toolResults[runToolId] = document.getElementById("resultArea").innerHTML;
     };
     if (im.complete && im.naturalWidth) set(); else im.onload = set;
+  });
+}
+
+// 结果区渲染后调用：文件被手动删除或下载目录已变更时，本地地址 404 自动回退远端地址
+const fallbackBound = new WeakSet();
+export function bindLocalFallback() {
+  document.querySelectorAll("#resultArea .result-item[data-remote]").forEach(item => {
+    const remote = item.dataset.remote || "";
+    if (!remote) return;
+    [item.querySelector("img"), item.querySelector("video")].forEach(el => {
+      if (!el || fallbackBound.has(el)) return;
+      fallbackBound.add(el);
+      el.addEventListener("error", () => {
+        if (el.getAttribute("src") === remote) return;  // 已经是远端地址，避免死循环
+        el.setAttribute("src", remote);
+      });
+    });
   });
 }
