@@ -685,6 +685,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def _handle_appinfo(self):
         info = _load_appinfo()
+        info["app"] = "runninghub"
         info["session"] = SESSION_ID
         info["token"] = ACCESS_TOKEN
         info["version"] = APP_VERSION

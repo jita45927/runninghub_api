@@ -31,6 +31,7 @@ os.chdir(BASE)
 LOG = os.path.join(BASE, "启动日志.log")
 APP_TITLE = "RunningHub AI设计师工具箱"
 APP_URL = "http://127.0.0.1:8900/"
+APP_ID = "runninghub"
 PORT_RANGE = range(8900, 8910)
 TOKEN_HEADER = "X-RunningHub-Token"
 MUTEX_NAME = "Local\\RunningHubToolbox.SingleInstance"
@@ -356,13 +357,24 @@ def acquire_instance_lock():
         return True
 
 
+def _is_self(info):
+    """识别本程序的实例；端口段与另一程序重叠，必须靠 app 标识区分。"""
+    if not isinstance(info, dict) or "tools" not in info:
+        return False
+    app = info.get("app")
+    if app:
+        return app == APP_ID
+    # 兼容无 app 字段的旧版本：仅本程序带 token
+    return "token" in info
+
+
 def find_running():
     """扫描本程序的端口，返回已在运行实例的 (端口, 令牌)。"""
     for port in PORT_RANGE:
         try:
             with urllib.request.urlopen("http://127.0.0.1:%d/appinfo" % port, timeout=0.8) as r:
                 info = json.loads(r.read().decode("utf-8"))
-            if isinstance(info, dict) and "tools" in info:
+            if _is_self(info):
                 return port, str(info.get("token") or "")
         except Exception:
             continue
