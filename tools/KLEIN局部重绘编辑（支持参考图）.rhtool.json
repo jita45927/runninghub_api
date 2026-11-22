@@ -4,7 +4,7 @@
   "name": "KLEIN局部重绘编辑（支持参考图）",
   "icon": "🖌️",
   "desc": "上传原图与参考图，按提示词对局部进行重绘；可开关双图编辑，并调整重绘区域像素与遮罩区域扩大倍数",
-  "sourceUrl": "",
+  "sourceUrl": "https://www.runninghub.cn/ai-detail/2124168070439727105",
   "toolType": "app",
   "webappId": "2124168070439727105",
   "instanceType": "default",
