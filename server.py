@@ -4,6 +4,7 @@
 #   /open-dir?path=...  → 调起 Windows 资源管理器打开指定目录
 #   /pick-download-dir  → 弹系统 FolderBrowserDialog 让用户选下载目录，写回 appinfo.txt 第二行
 #   /downloads/<文件名> → 只读提供下载目录中的结果文件（支持 Range，供结果区本地预览）
+#   /show-window        → 第二个启动的进程请求打开/置前已有主窗口
 import http.server, os, sys, json, locale, subprocess, shlex, uuid, re, urllib.request, threading, webbrowser, time
 import hmac, ipaddress, socket, html
 from urllib.parse import urlparse, parse_qs, unquote, quote
@@ -30,6 +31,7 @@ APPINFO = os.path.join(DATA_DIR, "appinfo.txt")
 SESSION_ID = uuid.uuid4().hex  # 每次启动 server 生成新会话号，用于清空上一次的生成结果
 ACCESS_TOKEN = uuid.uuid4().hex  # 本地变更接口的每次启动随机凭证，不能依赖 CORS 防护
 LOCAL_TOKEN_HEADER = "X-RunningHub-Token"
+SHOW_WINDOW_HOOK = None  # 由 launcher 注入：收到第二个实例的请求时打开或置前主窗口
 
 def _read_appinfo_lines():
     """读取 appinfo.txt，返回有效行列表。自动检测 UTF-8 / UTF-8-SIG / GBK。"""
@@ -362,6 +364,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._handle_save_image()
         elif parsed.path == "/shutdown":
             self._handle_shutdown()
+        elif parsed.path == "/show-window":
+            self._handle_show_window()
         elif parsed.path == "/open-url":
             self._handle_open_url(parse_qs(parsed.query))
         else:
@@ -380,6 +384,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         """退出程序：先返回响应，再由另一个线程停止服务（shutdown 不能在本线程调用）。"""
         self._send_json(200, {"ok": True})
         threading.Thread(target=self.server.shutdown, daemon=True).start()
+
+    def _handle_show_window(self):
+        """第二个启动的进程请求唤回界面：打开或置前已有应用窗口。"""
+        self._send_json(200, {"ok": True})
+        hook = SHOW_WINDOW_HOOK
+        if hook:
+            threading.Thread(target=hook, daemon=True).start()
 
     def _read_json_body(self):
         try:

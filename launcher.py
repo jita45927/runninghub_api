@@ -31,7 +31,11 @@ os.chdir(BASE)
 LOG = os.path.join(BASE, "启动日志.log")
 APP_TITLE = "RunningHub AI设计师工具箱"
 APP_URL = "http://127.0.0.1:8900/"
+PORT_RANGE = range(8900, 8910)
+TOKEN_HEADER = "X-RunningHub-Token"
+MUTEX_NAME = "Local\\RunningHubToolbox.SingleInstance"
 _TRAY = None
+_MUTEX = None
 _WINDOW_LOCK = threading.Lock()
 _EXITING = False
 
@@ -334,28 +338,82 @@ def stop_tray():
         _TRAY = None
 
 
-def already_running(port=8900):
-    """已有实例在跑：只打开窗口，避免重复启动第二个服务。"""
+def acquire_instance_lock():
+    """创建命名互斥体做单实例锁；返回 True 表示本进程是唯一运行实例。"""
+    global _MUTEX
     try:
-        with urllib.request.urlopen("http://127.0.0.1:%d/appinfo" % port, timeout=1.5) as r:
-            return r.status == 200 and "tools" in json.loads(r.read().decode("utf-8"))
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateMutexW.restype = wintypes.HANDLE
+        kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+        _MUTEX = kernel32.CreateMutexW(None, False, MUTEX_NAME)
+        if not _MUTEX:
+            log("单实例锁创建失败，继续启动")
+            return True
+        # 句柄需在进程生命周期内保持打开，进程退出时系统会自动释放互斥体
+        return ctypes.get_last_error() != 183  # ERROR_ALREADY_EXISTS
     except Exception:
+        log("单实例锁异常：" + traceback.format_exc())
+        return True
+
+
+def find_running():
+    """扫描本程序的端口，返回已在运行实例的 (端口, 令牌)。"""
+    for port in PORT_RANGE:
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:%d/appinfo" % port, timeout=0.8) as r:
+                info = json.loads(r.read().decode("utf-8"))
+            if isinstance(info, dict) and "tools" in info:
+                return port, str(info.get("token") or "")
+        except Exception:
+            continue
+    return None, ""
+
+
+def request_show_window(port, token):
+    """让已运行实例打开或置前主窗口，避免本次启动再起一个后台服务。"""
+    try:
+        req = urllib.request.Request(
+            "http://127.0.0.1:%d/show-window" % port, data=b"", method="POST",
+            headers={TOKEN_HEADER: token},
+        )
+        with urllib.request.urlopen(req, timeout=3) as r:
+            return r.status == 200
+    except Exception:
+        log("唤回已有窗口失败：" + traceback.format_exc())
         return False
 
 
 def main():
     start_log()
+
+    sole = acquire_instance_lock()
+    port, token = find_running()
+    if not sole:
+        # 另一实例正在启动：等它的服务就绪后唤回窗口，绝不启动第二个后台服务
+        for _ in range(60):
+            if port:
+                break
+            time.sleep(0.25)
+            port, token = find_running()
+        log("检测到已有实例（端口 %s），本次启动不创建新服务" % (port or "未就绪"))
+        if not port:
+            show_error("程序已在后台运行，但本地服务尚未就绪。\n请稍候通过系统托盘图标打开主界面。")
+            return
+    if port:
+        log("已有实例在运行（端口 %d），唤回窗口中" % port)
+        if not request_show_window(port, token):
+            # 兼容未提供 /show-window 的旧版本实例：直接打开它的界面
+            show_or_open_app_window("http://127.0.0.1:%d/" % port)
+        return
+
     ensure_dirs()
     write_appinfo()
-
-    if already_running():
-        log("检测到已有实例在运行，唤回或重新打开窗口")
-        show_or_open_app_window("http://127.0.0.1:8900/")
-        return
 
     try:
         start_tray()
         import server  # 延迟导入：导入时会把工作目录切到程序根目录
+        # 第二个启动的进程会请求该接口，由本进程负责打开或置前主窗口
+        server.SHOW_WINDOW_HOOK = lambda: show_or_open_app_window(APP_URL)
         log("server 模块已加载")
 
         def on_ready(port):
