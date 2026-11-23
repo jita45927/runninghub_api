@@ -192,8 +192,7 @@ def perform_update(installer_path):
         close_app_windows()
         stop_tray()
         time.sleep(0.3)
-        subprocess.Popen([installer_path, "/VERYSILENT", "/SUPPRESSMSGBOXES",
-                          "/NORESTART", "/SP-"], close_fds=True)
+        subprocess.Popen([installer_path, "/SILENT", "/NORESTART", "/SP-"], close_fds=True)
     except Exception:
         log("启动更新程序失败：" + traceback.format_exc())
         return

@@ -24,7 +24,7 @@ def _data_dir():
 
 
 os.chdir(_app_dir())
-APP_VERSION = "1.0.2"  # 版本号唯一来源：打包脚本、更新清单与界面均读取此处
+APP_VERSION = "1.0.3"  # 版本号唯一来源：打包脚本、更新清单与界面均读取此处
 BASE_DIR = _app_dir()
 DATA_DIR = _data_dir()
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -1124,8 +1124,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 if hook:
                     hook(path)
                 else:
-                    subprocess.Popen([path, "/VERYSILENT", "/SUPPRESSMSGBOXES",
-                                      "/NORESTART", "/SP-"], close_fds=True)
+                    subprocess.Popen([path, "/SILENT", "/NORESTART", "/SP-"], close_fds=True)
                     time.sleep(0.5)
                     os._exit(0)
             except Exception as e:

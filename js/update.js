@@ -100,12 +100,12 @@ async function pollProgress() {
     } else if (j.state === "ready") {
       stopPolling();
       setBar(100);
-      setStatus("下载完成，安装包校验通过。3 秒后自动安装并重启程序…");
+      setStatus("下载完成，安装包校验通过。3 秒后自动安装并重启程序，届时会出现安装进度窗口…");
       setButtons({ now: false, manual: false, cancel: false });
       let left = 3;
       countdownTimer = setInterval(() => {
         left--;
-        if (left > 0) { setStatus("下载完成，安装包校验通过。" + left + " 秒后自动安装并重启程序…"); return; }
+        if (left > 0) { setStatus("下载完成，安装包校验通过。" + left + " 秒后自动安装并重启程序，届时会出现安装进度窗口…"); return; }
         clearInterval(countdownTimer);
         countdownTimer = null;
         installUpdate();
@@ -148,7 +148,7 @@ async function cancelDownload() {
 
 async function installUpdate() {
   try {
-    setStatus("正在关闭程序并安装新版本，请稍候…");
+    setStatus("正在关闭程序并调起安装程序，安装进度窗口马上出现，请稍候…");
     const r = await localFetch("/update/install", { method: "POST" });
     const j = await r.json();
     if (!r.ok || !j.ok) throw new Error((j && j.error) || "安装失败");

@@ -1,16 +1,16 @@
 {
   "app": "runninghub",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "date": "2026-11-23",
   "notes": "本次更新包含工具配置与功能优化，建议升级到最新版本。",
-  "page": "https://github.com/jita45927/runninghub_api/releases/tag/v1.0.2",
+  "page": "https://github.com/jita45927/runninghub_api/releases/tag/v1.0.3",
   "installer": {
-    "name": "RunningHub-AI-Toolbox-Setup-1.0.2.exe",
-    "size": 19792945,
-    "sha256": "da3d900e4e24af3ae9dfa88e8ad460adc22df25907af7d280e4f50c3805a529e",
+    "name": "RunningHub-AI-Toolbox-Setup-1.0.3.exe",
+    "size": 19793489,
+    "sha256": "97cd9620cb65a7bc1cc8dcb5130af649e49167b8b325ddce3eb9e8a769a273a4",
     "urls": [
-      "https://gitee.com/matt8469/runninghub_api/releases/download/v1.0.2/RunningHub-AI-Toolbox-Setup-1.0.2.exe",
-      "https://github.com/jita45927/runninghub_api/releases/download/v1.0.2/RunningHub-AI-Toolbox-Setup-1.0.2.exe"
+      "https://gitee.com/matt8469/runninghub_api/releases/download/v1.0.3/RunningHub-AI-Toolbox-Setup-1.0.3.exe",
+      "https://github.com/jita45927/runninghub_api/releases/download/v1.0.3/RunningHub-AI-Toolbox-Setup-1.0.3.exe"
     ]
   }
 }
