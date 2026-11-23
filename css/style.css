@@ -163,6 +163,33 @@ body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: va
   text-align: center; color: var(--muted); cursor: pointer; font-size: 13px;
 }
 .add-tool:hover { border-color: var(--accent); color: var(--accent); }
+/* 工具来源标识：系统工具随更新覆盖，我的工具永久保留 */
+.tool-source {
+  display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 5px;
+  font-size: 10px; font-weight: 500; line-height: 16px; vertical-align: middle;
+}
+.tool-source.sys { color: #f0b429; background: rgba(240, 180, 41, .12); border: 1px solid rgba(240, 180, 41, .32); }
+.tool-source.user { color: #7fd4a8; background: rgba(127, 212, 168, .1); border: 1px solid rgba(127, 212, 168, .25); }
+/* 复制为我的工具：仅系统工具条目悬停时显示 */
+.tool-copy {
+  position: absolute; right: 32px; top: 8px; width: 20px; height: 20px; border-radius: 6px;
+  color: #f0b429; display: none; align-items: center; justify-content: center; font-size: 12px;
+}
+.tool-item:hover .tool-copy { display: flex; }
+.tool-copy:hover { background: #f0b429; color: #1b1f2a; }
+.tool-item.trashed .tool-copy { display: none; }
+/* 更新提示 */
+.key-btn.update-available { border-color: #f0b429; color: #f0b429; background: rgba(240, 180, 41, .1); }
+.update-notes {
+  margin: 0 0 12px; padding: 10px 12px; border-radius: 8px; background: var(--panel2);
+  border: 1px solid var(--border); color: var(--muted); font-size: 12.5px; line-height: 1.65;
+  white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow-y: auto;
+}
+.update-notes:empty { display: none; }
+.update-bar { height: 8px; border-radius: 4px; background: var(--panel2); overflow: hidden; margin-bottom: 10px; }
+.update-bar-fill { height: 100%; width: 0; border-radius: 4px; background: linear-gradient(90deg, #5b8cff, #9b5bff); transition: width .25s; }
+.update-meta { min-height: 18px; font-size: 12px; color: var(--muted); margin-bottom: 12px; overflow-wrap: anywhere; }
+.update-meta.error { color: #ff6b6b; }
 
 /* 右侧工作区 */
 .workspace { flex: 1; overflow-y: auto; padding: 24px; }

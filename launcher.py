@@ -81,39 +81,15 @@ def _read_download(path):
         return ""
 
 
-def _copy_missing(src, dst):
-    """迁移时只补缺失文件，同名用户文件绝不覆盖。"""
-    if not os.path.isdir(src) or _same_path(src, dst):
-        return
-    for root, dirs, files in os.walk(src):
-        rel = os.path.relpath(root, src)
-        target_dir = os.path.join(dst, rel) if rel != "." else dst
-        os.makedirs(target_dir, exist_ok=True)
-        for name in files:
-            source = os.path.join(root, name)
-            target = os.path.join(target_dir, name)
-            if not os.path.exists(target):
-                shutil.copy2(source, target)
-
-
 def ensure_dirs():
-    for name in ("tools", "download"):
+    """用户数据目录只放用户自己的工具，系统工具直接读安装目录 sys_tools。"""
+    for name in ("user_tools", "download"):
         os.makedirs(os.path.join(DATA, name), exist_ok=True)
-    if _same_path(DATA, BASE) or os.path.isfile(os.path.join(DATA, "appinfo.txt")):
-        return
-
-    # 新数据目录第一次启用：先保留旧安装的实际数据，再补齐只读内置模板。
-    _copy_missing(os.path.join(BASE, "tools"), os.path.join(DATA, "tools"))
-    _copy_missing(os.path.join(BASE, "builtin-tools"), os.path.join(DATA, "tools"))
-    legacy_download = _read_download(os.path.join(BASE, "appinfo.txt"))
-    if (not legacy_download or not os.path.isdir(legacy_download)
-            or _same_path(legacy_download, os.path.join(BASE, "download"))):
-        _copy_missing(os.path.join(BASE, "download"), os.path.join(DATA, "download"))
 
 
 def write_appinfo():
-    """记录用户 tools/download 路径；旧默认下载目录迁移后不再指回安装目录。"""
-    tools = os.path.join(DATA, "tools")
+    """记录用户工具/下载路径；系统工具路径不再写入 appinfo。"""
+    tools = os.path.join(DATA, "user_tools")
     path = os.path.join(DATA, "appinfo.txt")
     source_path = path
     if not _same_path(DATA, BASE) and not os.path.isfile(path):
@@ -126,6 +102,102 @@ def write_appinfo():
     with open(path, "w", encoding="utf-8") as f:
         f.write(tools + "\n" + download + "\n")
     log("数据目录：tools=%s download=%s" % (tools, download))
+
+
+def _read_tool_json(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            obj = json.load(f)
+        return obj if isinstance(obj, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def migrate_legacy_tools():
+    """1.0.1 → 1.0.2：把 data/tools 整体备份，系统工具副本丢弃，其余迁入 user_tools。
+    只处理安装版；任何异常都写日志，绝不阻塞启动。"""
+    if not getattr(sys, "frozen", False):
+        return
+    legacy = os.path.join(DATA, "tools")
+    status = os.path.join(DATA, ".migrated_sys_tools")
+    if os.path.isfile(status):
+        return
+    try:
+        if not os.path.isdir(legacy) or not os.listdir(legacy):
+            with open(status, "w", encoding="utf-8") as f:
+                f.write("nothing to migrate\n")
+            return
+
+        backup = os.path.join(DATA, "backup", "tools-" + time.strftime("%Y%m%d_%H%M%S"))
+        os.makedirs(os.path.dirname(backup), exist_ok=True)
+        try:
+            os.replace(legacy, backup)
+        except OSError:
+            shutil.copytree(legacy, backup)
+
+        sys_ids = set()
+        sys_dir = os.path.join(BASE, "sys_tools")
+        if os.path.isdir(sys_dir):
+            for fn in os.listdir(sys_dir):
+                if fn.lower().endswith(".rhtool.json"):
+                    cfg = _read_tool_json(os.path.join(sys_dir, fn)) or {}
+                    wid = str(cfg.get("webappId") or "").strip()
+                    if wid:
+                        sys_ids.add(wid)
+
+        user_dir = os.path.join(DATA, "user_tools")
+        os.makedirs(user_dir, exist_ok=True)
+        tombstone_file = os.path.join(user_dir, ".deleted.json")
+        tombstones = set()
+        try:
+            with open(tombstone_file, "r", encoding="utf-8") as f:
+                tombstones = {str(x).strip() for x in (json.load(f).get("webappIds") or [])}
+        except (OSError, ValueError, AttributeError):
+            pass
+
+        migrated = 0
+        for fn in os.listdir(backup):
+            path = os.path.join(backup, fn)
+            if not os.path.isfile(path) or not fn.lower().endswith(".rhtool.json"):
+                continue
+            cfg = _read_tool_json(path) or {}
+            wid = str(cfg.get("webappId") or "").strip()
+            if wid and wid in sys_ids:
+                if cfg.get("deleted"):
+                    tombstones.add(wid)  # 旧版删掉的系统工具继续保持删除
+                continue
+            shutil.copy2(path, os.path.join(user_dir, fn))
+            base = fn[:-len(".rhtool.json")] if fn.lower().endswith(".rhtool.json") else fn
+            for ext in (".png", ".jpg", ".jpeg", ".webp"):
+                cover = os.path.join(backup, base + ext)
+                if os.path.isfile(cover):
+                    shutil.copy2(cover, os.path.join(user_dir, base + ext))
+                    break
+            migrated += 1
+
+        if tombstones:
+            with open(tombstone_file, "w", encoding="utf-8") as f:
+                json.dump({"webappIds": sorted(tombstones)}, f, ensure_ascii=False, indent=2)
+        with open(status, "w", encoding="utf-8") as f:
+            f.write("backup=%s migrated=%d\n" % (backup, migrated))
+        log("旧工具配置已迁移：备份=%s 用户工具=%d" % (backup, migrated))
+    except Exception:
+        log("旧工具配置迁移失败：" + traceback.format_exc())
+
+
+def perform_update(installer_path):
+    """自动更新：关闭界面和托盘，静默安装新版本后退出，由安装器重新拉起程序。"""
+    log("开始自动更新：" + installer_path)
+    try:
+        close_app_windows()
+        stop_tray()
+        time.sleep(0.3)
+        subprocess.Popen([installer_path, "/VERYSILENT", "/SUPPRESSMSGBOXES",
+                          "/NORESTART", "/SP-"], close_fds=True)
+    except Exception:
+        log("启动更新程序失败：" + traceback.format_exc())
+        return
+    os._exit(0)
 
 
 def has_console():
@@ -420,12 +492,14 @@ def main():
 
     ensure_dirs()
     write_appinfo()
+    migrate_legacy_tools()
 
     try:
         start_tray()
         import server  # 延迟导入：导入时会把工作目录切到程序根目录
         # 第二个启动的进程会请求该接口，由本进程负责打开或置前主窗口
         server.SHOW_WINDOW_HOOK = lambda: show_or_open_app_window(APP_URL)
+        server.UPDATE_INSTALL_HOOK = perform_update
         log("server 模块已加载")
 
         def on_ready(port):

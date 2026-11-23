@@ -20,6 +20,7 @@ export const state = {
   lastImgHandle: null,   // 上次选图所在位置（用于 showOpenFilePicker 的 startIn）
   toolsDirHandle: null,  // 配置目录（tools/）句柄，授权后 tools 目录成为工具配置唯一数据源
   toolFileNames: {},     // 工具 id → 配置目录中的文件名（用于改名时删除旧文件）
+  toolSources: {},       // 工具 id → "sys"（系统工具）| "user"（我的工具）
   collapsedCats: [],     // 左侧栏中被收起的分类名
   catOrder: [],          // 左侧栏分类的自定义排列顺序（拖动分组头部后保存）
 };

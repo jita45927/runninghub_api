@@ -3,7 +3,7 @@
 // 应用专属设置与配置面板通过 initModals 的 panel 参数接入（见各应用 js/ui/panels.js）。
 import { FIELD_TYPES, ICON_OPTIONS, esc } from "../config.js";
 import { state, saveTools, saveActiveId, tagsOf } from "../store.js";
-import { importToolFile, toolsDirGranted, persistTool } from "../tools.js";
+import { importToolFile, toolsDirGranted, persistTool, removeToolFile, toolSourceOf, setToolTombstone } from "../tools.js";
 import { showStatus } from "./form.js";
 
 let editingToolId = null;
@@ -394,15 +394,17 @@ export function initModals(renderAll, panel) {
     renderAll();
     // 应用专属的保存后处理（可选钩子，未实现的程序会跳过）
     const savedTool = state.tools.find(x => x.id === (editingToolId || data.id));
+    const saveSource = toolSourceOf(savedTool);
     if (savedTool && appPanel.afterToolSave) {
-      try { appPanel.afterToolSave(savedTool, prevName); }
+      try { appPanel.afterToolSave(savedTool, prevName, saveSource); }
       catch (e) { /* 钩子异常不影响工具保存 */ }
     }
-    // 写回 tools 目录：本地服务模式下由 server 直接写文件，无需浏览器授权
+    // 写回配置目录：sys 写系统目录，user 写我的工具目录
     try {
       const saved = state.tools.find(x => x.id === (editingToolId || data.id));
       const fn = await persistTool(saved);
-      if (fn) showStatus("已保存到 tools/" + fn
+      if (fn) showStatus("已保存到 " + (toolSourceOf(saved) === "sys" ? "系统工具" : "我的工具") + " 目录/" + fn
+        + (toolSourceOf(saved) === "sys" ? "（提示：系统工具修改会在程序更新时被覆盖，可复制为我的工具）" : "")
         + (mapWarnNames.length ? "；⚠ 注意：字段「" + mapWarnNames.join("、") + "」的映射值含非数字项，如需提交数字请改成纯数字" : ""),
         mapWarnNames.length ? "error" : "success");
     } catch (err) { showStatus("写入配置目录失败：" + err.message, "error"); }
@@ -412,8 +414,11 @@ export function initModals(renderAll, panel) {
     const delTool = state.tools.find(x => x.id === editingToolId);
     if (!delTool) return;
     if (state.currentRun && state.runningToolId === delTool.id) { alert("该工具正在运行，请先取消任务"); return; }
-    // 与左侧列表的 ✕ 保持一致：移入回收站，配置文件保留
-    if (!confirm("「" + (delTool.name || "未命名") + "」会被移动到回收站列表，并不会彻底删除配置文件。\n\n回收站中的工具不可使用，可随时还原。")) return;
+    // 与左侧列表的 ✕ 保持一致：移入回收站；系统工具写墓碑隐藏
+    const isSys = toolSourceOf(delTool) === "sys";
+    if (!confirm(isSys
+      ? "「" + (delTool.name || "未命名") + "」是系统工具，将标记为删除并隐藏（程序更新后也不会自动恢复）。\n\n可用「重置系统工具」找回。"
+      : "「" + (delTool.name || "未命名") + "」会被移动到回收站列表，并不会彻底删除配置文件。\n\n回收站中的工具不可使用，可随时还原。")) return;
     delTool.deleted = true;
     if (state.activeId === delTool.id) {
       const first = state.tools.find(x => !x.deleted);
@@ -423,7 +428,11 @@ export function initModals(renderAll, panel) {
     saveActiveId();
     toolModal.classList.remove("show");
     renderAll();
-    try { await persistTool(delTool); } catch (err) { /* 配置文件写入失败不影响列表状态 */ }
+    try {
+      if (isSys && delTool.webappId) await setToolTombstone(delTool.webappId, true);
+      else if (isSys) await removeToolFile(delTool);
+      else await persistTool(delTool);
+    } catch (err) { /* 配置文件写入失败不影响列表状态 */ }
   };
 
   // 弹窗通用关闭

@@ -5,7 +5,7 @@
 #define MyAppName "RunningHub AI 设计师工具箱"
 ; 正式构建由 打包安装包.bat 从 server.py 的 APP_VERSION 传入 /DMyAppVersion，此处仅作手动编译兜底
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.1"
+  #define MyAppVersion "1.0.2"
 #endif
 #define MyAppPublisher "RunningHub AI"
 #define MyAppExeName "RunningHubToolbox.exe"
@@ -40,8 +40,13 @@ Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.i
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加任务："; Flags: checkedonce
 
 [Files]
-; 只安装程序资源和 builtin-tools 只读模板；用户 tools/download/appinfo 永远不进安装目录
-Source: "dist\RunningHubToolbox\*"; DestDir: "{app}"; Excludes: "appinfo.txt,tools\*,download\*"; Flags: ignoreversion recursesubdirs createallsubdirs
+; 系统工具 sys_tools 随安装包整体覆盖；用户 user_tools/download/appinfo 永远不进安装目录
+Source: "dist\RunningHubToolbox\*"; DestDir: "{app}"; Excludes: "appinfo.txt,user_tools\*,download\*"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[InstallDelete]
+; 更新时先清空系统工具目录，确保被改名/改过参数的旧系统配置不残留
+Type: files; Name: "{app}\sys_tools\*"
+Type: files; Name: "{app}\sys_tools.zip"
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
@@ -50,6 +55,8 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilen
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "立即启动 {#MyAppName}"; Flags: nowait postinstall skipifsilent
+; 静默更新完成后由安装器自动拉起新版本
+Filename: "{app}\{#MyAppExeName}"; Flags: nowait; Check: IsSilentUpdate
 
 [Code]
 procedure KillRunningApp;
@@ -59,6 +66,11 @@ begin
   // 无窗口进程：Restart Manager 关不掉，安装/卸载前先强制结束，避免文件被占用
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(600);
+end;
+
+function IsSilentUpdate: Boolean;
+begin
+  Result := WizardSilent;
 end;
 
 function InitializeSetup(): Boolean;

@@ -1,7 +1,7 @@
 // ================= 左侧工具列表（按分类分组，可展开/收起）【公共核心】 =================
 // 本文件由公共核心同步而来：请修改 runninghub_api/js/ui/toollist.js，再运行「同步核心.ps1」。
 import { state, saveTools, saveActiveId, saveCats, saveCatOrder, tagsOf } from "../store.js";
-import { removeToolFile, persistTool } from "../tools.js";
+import { removeToolFile, persistTool, toolSourceOf, setToolTombstone, copyToolToUser } from "../tools.js";
 import { showStatus } from "./form.js";
 
 // 回收站：工具级状态（deleted=true），所有分类里都不再显示，只在此分组出现且禁用
@@ -38,7 +38,10 @@ function nameOf(t) { return t.name || "未命名"; }
 // 移入回收站：左侧列表与首页卡片共用（导出供 home.js 使用）
 export async function trashTool(t, renderAll) {
   if (state.currentRun && state.runningToolId === t.id) { alert("该工具正在运行，请先取消任务"); return; }
-  if (!confirm("「" + nameOf(t) + "」会被移动到回收站列表，并不会彻底删除配置文件。\n\n回收站中的工具不可使用，可随时还原。")) return;
+  const isSys = toolSourceOf(t) === "sys";
+  if (!confirm(isSys
+    ? "「" + nameOf(t) + "」是系统工具，将标记为删除并隐藏（程序更新后也不会自动恢复）。\n\n可用「重置系统工具」找回。"
+    : "「" + nameOf(t) + "」会被移动到回收站列表，并不会彻底删除配置文件。\n\n回收站中的工具不可使用，可随时还原。")) return;
   t.deleted = true;
   if (state.activeId === t.id) {
     const first = state.tools.find(x => !x.deleted);
@@ -48,8 +51,14 @@ export async function trashTool(t, renderAll) {
   saveTools();
   renderAll();
   try {
-    await persistTool(t);
-    showStatus("已移入回收站，配置文件保留在 tools 目录", "ok");
+    if (isSys) {
+      if (t.webappId) await setToolTombstone(t.webappId, true);
+      else await removeToolFile(t);  // 极端情况：系统配置缺少 webappId，只能移走文件
+      showStatus("已从系统工具中移除，可在「初始设置 → 重置系统工具」找回", "ok");
+    } else {
+      await persistTool(t);
+      showStatus("已移入回收站，配置文件保留在我的工具目录", "ok");
+    }
   } catch (err) {
     showStatus("移入回收站失败：" + err.message, "error");
   }
@@ -59,17 +68,22 @@ async function restoreTool(t, renderAll) {
   delete t.deleted;
   saveTools();
   renderAll();
+  const isSys = toolSourceOf(t) === "sys";
   try {
-    await persistTool(t);
+    if (isSys) await setToolTombstone(t.webappId, false);
+    else await persistTool(t);
     showStatus("已还原「" + nameOf(t) + "」", "ok");
   } catch (err) {
-    showStatus("已还原，但写回配置文件失败：" + err.message, "error");
+    showStatus("已还原，但写回配置失败：" + err.message, "error");
   }
 }
 
 // 永久删除单个工具：配置文件一并删除
 async function purgeTool(t, renderAll) {
-  if (!confirm("确定永久删除「" + nameOf(t) + "」吗？\n\n将删除 tools 目录中的配置文件，无法恢复。")) return;
+  const isSys = toolSourceOf(t) === "sys";
+  if (!confirm(isSys
+    ? "确定移除系统工具「" + nameOf(t) + "」吗？\n\n系统文件不会被删除，但程序更新后也不会自动恢复；可用「重置系统工具」找回。"
+    : "确定永久删除「" + nameOf(t) + "」吗？\n\n将删除我的工具目录中的配置文件，无法恢复。")) return;
   state.tools = state.tools.filter(x => x.id !== t.id);
   if (state.activeId === t.id) {
     const first = state.tools.find(x => !x.deleted);
@@ -79,8 +93,11 @@ async function purgeTool(t, renderAll) {
   saveTools();
   renderAll();
   try {
-    const ok = await removeToolFile(t);
-    showStatus(ok ? "已永久删除，配置文件已移除" : "已从列表移除（未找到配置文件）", ok ? "ok" : "error");
+    let ok;
+    if (isSys && t.webappId) { await setToolTombstone(t.webappId, true); ok = true; }
+    else ok = await removeToolFile(t);
+    showStatus(ok ? (isSys ? "已移除系统工具，可用「重置系统工具」找回" : "已永久删除，配置文件已移除")
+      : "已从列表移除（未找到配置文件）", ok ? "ok" : "error");
   } catch (err) {
     showStatus("删除配置文件失败：" + err.message, "error");
   }
@@ -90,7 +107,7 @@ async function purgeTool(t, renderAll) {
 async function emptyTrash(renderAll) {
   const dead = state.tools.filter(t => t.deleted);
   if (!dead.length) return;
-  if (!confirm("确定清空回收站吗？\n\n将永久删除 " + dead.length + " 个工具的配置文件（tools 目录），无法恢复。")) return;
+  if (!confirm("确定清空回收站吗？\n\n将永久删除 " + dead.length + " 个工具配置（系统工具只做隐藏，可用「重置系统工具」找回）。")) return;
   const ids = dead.map(t => t.id);
   state.tools = state.tools.filter(t => !t.deleted);
   if (ids.includes(state.activeId)) {
@@ -102,7 +119,10 @@ async function emptyTrash(renderAll) {
   renderAll();
   let ok = 0;
   for (const t of dead) {
-    try { if (await removeToolFile(t)) ok++; } catch (e) { /* 单个失败不影响其余 */ }
+    try {
+      if (toolSourceOf(t) === "sys" && t.webappId) { await setToolTombstone(t.webappId, true); ok++; }
+      else if (await removeToolFile(t)) ok++;
+    } catch (e) { /* 单个失败不影响其余 */ }
   }
   showStatus("回收站已清空，移除 " + ok + "/" + dead.length + " 个配置文件", ok ? "ok" : "error");
 }
@@ -243,6 +263,12 @@ function buildToolItem(t, renderAll, groupTag) {
   const nameEl = document.createElement("div");
   nameEl.className = "tool-name";
   nameEl.textContent = t.name || "未命名";
+  const srcEl = document.createElement("span");
+  const isSysTool = toolSourceOf(t) === "sys";
+  srcEl.className = "tool-source " + (isSysTool ? "sys" : "user");
+  srcEl.textContent = isSysTool ? "系统" : "我的";
+  srcEl.title = isSysTool ? "系统工具：修改会在程序更新时被覆盖，可复制为我的工具" : "我的工具：不会随程序更新变化";
+  nameEl.appendChild(srcEl);
   const descEl = document.createElement("div");
   descEl.className = "tool-desc";
   descEl.textContent = t.desc || "";
@@ -275,7 +301,20 @@ function buildToolItem(t, renderAll, groupTag) {
   }
 
   delEl.title = "移入回收站（不删除配置文件）";
-  el.append(iconEl, metaEl, delEl);
+  if (isSysTool) {
+    const copyEl = document.createElement("div");
+    copyEl.className = "tool-copy";
+    copyEl.textContent = "⧉";
+    copyEl.title = "复制为我的工具（之后修改不会随程序更新被覆盖）";
+    copyEl.onclick = async e => {
+      e.stopPropagation();
+      const j = await copyToolToUser(t, renderAll);
+      if (j) showStatus("已复制为我的工具「" + (j.name || t.name) + "」", "ok");
+    };
+    el.append(iconEl, metaEl, copyEl, delEl);
+  } else {
+    el.append(iconEl, metaEl, delEl);
+  }
   delEl.onclick = e => {
     e.stopPropagation();
     trashTool(t, renderAll);

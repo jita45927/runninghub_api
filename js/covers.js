@@ -111,18 +111,19 @@ export async function coverPreviewUrl(file) {
 }
 
 // 保存封面到 tools 目录：优先由本地服务直接写入，未启动服务时才需要目录句柄授权
-export async function saveCover(toolName, file) {
+export async function saveCover(toolName, file, source) {
   if (file.type !== "image/png" && file.type !== "image/jpeg") throw new Error("封面仅支持 PNG 或 JPG 图片");
   if (file.size > MAX_COVER_SIZE) throw new Error("封面图片不能超过 8MB");
 
   const { blob, ext } = await getNormalized(file);
   const base = toolBaseName({ name: toolName });
   let savedName = null;
+  const src = source === "sys" ? "sys" : "user";
 
   // 本地服务模式：POST /save-cover，浏览器无需任何文件夹授权
   if (location.protocol.startsWith("http")) {
     try {
-      const r = await localFetch("/save-cover?name=" + encodeURIComponent(base), { method: "POST", body: blob });
+      const r = await localFetch("/save-cover?name=" + encodeURIComponent(base) + "&source=" + src, { method: "POST", body: blob });
       if (r.ok) {
         const j = await r.json();
         if (j && j.ok && j.file) savedName = j.file;
@@ -154,7 +155,7 @@ export async function saveCover(toolName, file) {
 }
 
 // 工具改名时同步重命名封面文件；没有封面时静默返回 null
-export async function renameCover(oldToolName, newToolName) {
+export async function renameCover(oldToolName, newToolName, source) {
   const oldBase = toolBaseName({ name: oldToolName });
   const newBase = toolBaseName({ name: newToolName });
   if (!oldBase || oldBase === newBase) return null;
@@ -167,7 +168,7 @@ export async function renameCover(oldToolName, newToolName) {
       const r = await localFetch("/rename-cover", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ old: oldBase, new: newBase })
+        body: JSON.stringify({ old: oldBase, new: newBase, source: source === "sys" ? "sys" : "user" })
       });
       if (r.ok) {
         const j = await r.json();

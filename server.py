@@ -6,7 +6,7 @@
 #   /downloads/<文件名> → 只读提供下载目录中的结果文件（支持 Range，供结果区本地预览）
 #   /show-window        → 第二个启动的进程请求打开/置前已有主窗口
 import http.server, os, sys, json, locale, subprocess, shlex, uuid, re, urllib.request, threading, webbrowser, time
-import hmac, ipaddress, socket, html
+import hmac, ipaddress, socket, html, hashlib, shutil, zipfile
 from urllib.parse import urlparse, parse_qs, unquote, quote
 
 # 程序根目录：源码运行时是 server.py 所在目录；打包成 exe 后是 exe 所在目录
@@ -24,7 +24,8 @@ def _data_dir():
 
 
 os.chdir(_app_dir())
-APP_VERSION = "1.0.1"  # 版本号唯一来源：打包脚本与界面均读取此处
+APP_VERSION = "1.0.2"  # 版本号唯一来源：打包脚本、更新清单与界面均读取此处
+BASE_DIR = _app_dir()
 DATA_DIR = _data_dir()
 os.makedirs(DATA_DIR, exist_ok=True)
 APPINFO = os.path.join(DATA_DIR, "appinfo.txt")
@@ -32,6 +33,30 @@ SESSION_ID = uuid.uuid4().hex  # 每次启动 server 生成新会话号，用于
 ACCESS_TOKEN = uuid.uuid4().hex  # 本地变更接口的每次启动随机凭证，不能依赖 CORS 防护
 LOCAL_TOKEN_HEADER = "X-RunningHub-Token"
 SHOW_WINDOW_HOOK = None  # 由 launcher 注入：收到第二个实例的请求时打开或置前主窗口
+
+# ===== 工具配置目录：系统工具随安装包覆盖，用户工具永远保留 =====
+SYS_TOOLS_DIR = os.path.join(BASE_DIR, "sys_tools")
+USER_TOOLS_DIR = os.path.join(DATA_DIR, "user_tools")
+TOMBSTONE_FILE = os.path.join(USER_TOOLS_DIR, ".deleted.json")
+SYS_ZIP = os.path.join(BASE_DIR, "sys_tools.zip")
+TOOL_EXTS = (".rhtool.json",)
+COVER_EXTS = (".png", ".jpg", ".jpeg", ".webp")
+
+# ===== 自动更新 =====
+UPDATE_MANIFEST_URLS = [
+    "https://gitee.com/jita45927/runninghub_api/raw/master/update/latest.json",
+    "https://raw.githubusercontent.com/jita45927/runninghub_api/master/update/latest.json",
+]
+UPDATE_ALLOWED_HOSTS = {"gitee.com", "giteeusercontent.com", "raw.githubusercontent.com",
+                        "github.com", "objects.githubusercontent.com",
+                        "github-releases.githubusercontent.com", "aliyuncs.com"}
+UPDATE_DIR = os.path.join(DATA_DIR, "update")
+UPDATE_FILE_NAME = "RunningHubToolbox-update.exe"
+UPDATE_INSTALL_HOOK = None  # 由 launcher 注入：关闭窗口/托盘后静默安装并退出
+_UPDATE_LOCK = threading.Lock()
+_UPDATE_CANCEL = threading.Event()
+_UPDATE_STATE = {"state": "idle", "received": 0, "total": 0, "percent": 0,
+                 "source": "", "error": "", "version": "", "sha256": "", "size": 0}
 
 def _read_appinfo_lines():
     """读取 appinfo.txt，返回有效行列表。自动检测 UTF-8 / UTF-8-SIG / GBK。"""
@@ -69,17 +94,118 @@ def _safe_filename(name, fallback):
     name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name)
     return name or fallback
 
+def _sys_tools_dir():
+    """系统工具目录；不存在时等同于禁用系统工具。"""
+    return SYS_TOOLS_DIR if os.path.isdir(SYS_TOOLS_DIR) else None
+
+def _user_tools_dir():
+    os.makedirs(USER_TOOLS_DIR, exist_ok=True)
+    return USER_TOOLS_DIR
+
 def _tools_dir():
-    """工具配置目录；appinfo.txt 里的路径不可用时回退到用户数据目录下的 tools。"""
-    d = _load_appinfo().get("tools") or ""
-    if not d:
-        d = os.path.join(DATA_DIR, "tools")
+    """兼容旧调用：默认操作对象是用户工具目录。"""
+    return _user_tools_dir()
+
+def _source_dir(source):
+    """按来源返回可写目录；sys 不可用时返回 (None, True) 由调用方降级。"""
+    if str(source or "").strip().lower() == "sys":
+        return SYS_TOOLS_DIR if os.path.isdir(SYS_TOOLS_DIR) else None
+    return _user_tools_dir()
+
+def _read_tombstones():
     try:
-        os.makedirs(d, exist_ok=True)
-    except OSError:
-        d = os.path.join(DATA_DIR, "tools")
-        os.makedirs(d, exist_ok=True)
-    return d
+        with open(TOMBSTONE_FILE, "r", encoding="utf-8") as f:
+            obj = json.load(f)
+        ids = obj.get("webappIds") if isinstance(obj, dict) else None
+        return {str(x).strip() for x in (ids or []) if str(x).strip()}
+    except (OSError, ValueError):
+        return set()
+
+def _write_tombstones(ids):
+    _user_tools_dir()
+    tmp = TOMBSTONE_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"webappIds": sorted(ids)}, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, TOMBSTONE_FILE)
+
+def _read_tool_config(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        return cfg if isinstance(cfg, dict) else None
+    except (OSError, ValueError):
+        return None
+
+def _cover_file(dir_path, base):
+    if not dir_path:
+        return ""
+    for ext in COVER_EXTS:
+        fn = base + ext
+        if os.path.isfile(os.path.join(dir_path, fn)):
+            return fn
+    return ""
+
+def _tools_index():
+    """合并 user_tools 与 sys_tools：user 优先，同 webappId 的 sys 原版隐藏；
+    sys 工具被墓碑删除时不再出现；user 允许同 ID 多份变体。"""
+    tombstones = _read_tombstones()
+    files = []
+    user_ids = set()
+
+    def scan(d, source):
+        if not d or not os.path.isdir(d):
+            return
+        try:
+            names = sorted(n for n in os.listdir(d) if n.lower().endswith(".rhtool.json"))
+        except OSError:
+            return
+        for fn in names:
+            path = os.path.join(d, fn)
+            if not os.path.isfile(path):
+                continue
+            base = re.sub(r"\.rhtool\.json$", "", fn, flags=re.I)
+            cfg = _read_tool_config(path)
+            if cfg is None:
+                files.append({"file": fn, "source": source, "webappId": "", "name": base,
+                              "broken": True, "cover": _cover_file(d, base)})
+                continue
+            wid = str(cfg.get("webappId") or "").strip()
+            if source == "sys" and wid and wid in tombstones:
+                continue
+            if source == "sys" and wid and wid in user_ids:
+                continue  # 用户已有同 ID 工具，隐藏系统原版
+            if source == "user" and wid:
+                user_ids.add(wid)
+            files.append({
+                "file": fn,
+                "source": source,
+                "webappId": wid,
+                "name": str(cfg.get("name") or base),
+                "deleted": bool(cfg.get("deleted")),
+                "cover": _cover_file(d, base),
+            })
+
+    scan(_user_tools_dir(), "user")
+    scan(_sys_tools_dir(), "sys")
+    return {"ok": True, "files": files, "deleted": sorted(tombstones)}
+
+def _find_tool_file(name):
+    """按合并视图查找静态文件：配置只暴露生效版本，封面 user 优先。"""
+    if not name:
+        return None
+    if name.lower().endswith(".rhtool.json"):
+        for e in _tools_index()["files"]:
+            if e["file"] == name and not e.get("broken"):
+                d = _user_tools_dir() if e["source"] == "user" else SYS_TOOLS_DIR
+                p = os.path.join(d, name)
+                if os.path.isfile(p):
+                    return p
+        return None
+    for d in (_user_tools_dir(), SYS_TOOLS_DIR):
+        p = os.path.join(d, name)
+        if os.path.isfile(p):
+            return p
+    return None
 
 def _download_dir():
     """下载目录；路径不可用时回退到用户数据目录下的 download，避免保存结果直接失败。"""
@@ -288,6 +414,105 @@ class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
         return None
 
 
+# ================= 自动更新辅助 =================
+def _version_key(v):
+    """把 1.0.10 这类版本号转成可比较的整数元组。"""
+    parts = re.findall(r"\d+", str(v or ""))
+    return tuple(int(x) for x in parts) if parts else (0,)
+
+def _validate_update_url(url):
+    """更新清单与安装包只允许 HTTPS + 白名单主机，阻断内网目标。"""
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").rstrip(".").lower()
+    if parsed.scheme != "https" or not host or parsed.username or parsed.password:
+        raise ValueError("更新地址必须是 HTTPS 且不能带账号密码")
+    if parsed.port not in (None, 443):
+        raise ValueError("更新地址只允许默认 HTTPS 端口")
+    if not any(host == h or host.endswith("." + h) for h in UPDATE_ALLOWED_HOSTS):
+        raise ValueError("更新地址主机不在白名单：" + host)
+    return url
+
+def _fetch_update_manifest():
+    """按 Gitee → GitHub 顺序拉取清单，全部失败时抛出最后一个错误。"""
+    last = None
+    for url in UPDATE_MANIFEST_URLS:
+        try:
+            _validate_update_url(url)
+            req = urllib.request.Request(url, headers={"User-Agent": "RunningHubToolbox/%s" % APP_VERSION})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                _validate_update_url(r.geturl() or url)
+                obj = json.loads(r.read().decode("utf-8"))
+            if not isinstance(obj, dict) or not obj.get("version"):
+                raise ValueError("更新清单格式不正确")
+            return obj
+        except Exception as e:
+            last = e
+    raise last or RuntimeError("无法获取更新清单")
+
+def _update_state_snapshot():
+    with _UPDATE_LOCK:
+        return dict(_UPDATE_STATE)
+
+def _set_update_state(**kw):
+    with _UPDATE_LOCK:
+        _UPDATE_STATE.update(kw)
+
+def _download_update_worker(manifest):
+    installer = manifest.get("installer") or {}
+    urls = [u for u in (installer.get("urls") or []) if isinstance(u, str)]
+    expected = int(installer.get("size") or 0)
+    sha = str(installer.get("sha256") or "").strip().lower()
+    version = str(manifest.get("version") or "")
+    os.makedirs(UPDATE_DIR, exist_ok=True)
+    final = os.path.join(UPDATE_DIR, UPDATE_FILE_NAME)
+    part = final + ".part"
+    last_err = ""
+    for url in urls:
+        if _UPDATE_CANCEL.is_set():
+            _set_update_state(state="cancelled")
+            return
+        try:
+            _validate_update_url(url)
+            req = urllib.request.Request(url, headers={"User-Agent": "RunningHubToolbox/%s" % APP_VERSION})
+            with urllib.request.urlopen(req, timeout=30) as r:
+                _validate_update_url(r.geturl() or url)
+                total = int(r.headers.get("Content-Length") or 0) or expected
+                _set_update_state(state="downloading", received=0, total=total, percent=0,
+                                  source=urlparse(url).hostname or "", error="")
+                digest = hashlib.sha256()
+                received = 0
+                with open(part, "wb") as f:
+                    while True:
+                        if _UPDATE_CANCEL.is_set():
+                            raise KeyboardInterrupt("cancelled")
+                        chunk = r.read(65536)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        digest.update(chunk)
+                        received += len(chunk)
+                        pct = int(received * 100 / total) if total else 0
+                        _set_update_state(received=received, total=total, percent=min(pct, 100))
+            if expected and received != expected:
+                raise ValueError("安装包大小不符：%d != %d" % (received, expected))
+            if sha and digest.hexdigest().lower() != sha:
+                raise ValueError("安装包 SHA256 校验失败")
+            os.replace(part, final)
+            _set_update_state(state="ready", received=received, total=received, percent=100,
+                              version=version, sha256=sha, size=received, error="")
+            return
+        except KeyboardInterrupt:
+            try: os.remove(part)
+            except OSError: pass
+            _set_update_state(state="cancelled", error="")
+            return
+        except Exception as e:
+            last_err = str(e)
+            try: os.remove(part)
+            except OSError: pass
+    _set_update_state(state="error", error=last_err or "下载失败")
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def _check_host(self):
         """Host 白名单同时阻止 DNS rebinding 读取令牌和静态资源。"""
@@ -324,6 +549,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/appinfo":
             self._handle_appinfo()
+        elif parsed.path == "/tools-index":
+            self._send_json(200, _tools_index())
+        elif parsed.path == "/update/progress":
+            self._send_json(200, dict(ok=True, **_update_state_snapshot()))
         elif parsed.path == "/open-dir":
             if self._check_local_action():
                 self._handle_open_dir(parse_qs(parsed.query))
@@ -360,6 +589,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._handle_save_tool()
         elif parsed.path == "/delete-tool":
             self._handle_delete_tool()
+        elif parsed.path == "/tool-tombstone":
+            self._handle_tool_tombstone()
+        elif parsed.path == "/copy-tool":
+            self._handle_copy_tool()
+        elif parsed.path == "/reset-sys-tools":
+            self._handle_reset_sys_tools()
+        elif parsed.path == "/update/check":
+            self._handle_update_check()
+        elif parsed.path == "/update/download":
+            self._handle_update_download()
+        elif parsed.path == "/update/cancel":
+            _UPDATE_CANCEL.set()
+            self._send_json(200, {"ok": True})
+        elif parsed.path == "/update/install":
+            self._handle_update_install()
         elif parsed.path == "/save-image":
             self._handle_save_image()
         elif parsed.path == "/shutdown":
@@ -401,27 +645,27 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return None
 
     def _handle_tools_static(self, parsed, head_only=False):
-        """从用户 tools 目录提供配置和封面，不再依赖安装目录中的静态 tools。"""
+        """合并暴露 user_tools / sys_tools：同名文件 user 优先，系统工具隐藏的旧版本不对外。"""
         if parsed.path == "/tools":
             self.send_response(301)
             self.send_header("Location", "/tools/")
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
-        d = _tools_dir()
         if parsed.path == "/tools/":
-            try:
-                names = sorted(
-                    fn for fn in os.listdir(d)
-                    if fn.lower().endswith((".rhtool.json", ".png", ".jpg", ".jpeg"))
-                    and os.path.isfile(os.path.join(d, fn))
-                )
-            except OSError:
-                self.send_error(404, "Tools directory unavailable")
-                return
+            names = {e["file"] for e in _tools_index()["files"]}
+            for d in (_user_tools_dir(), SYS_TOOLS_DIR):
+                if not os.path.isdir(d):
+                    continue
+                try:
+                    for fn in os.listdir(d):
+                        if fn.lower().endswith(COVER_EXTS) and os.path.isfile(os.path.join(d, fn)):
+                            names.add(fn)
+                except OSError:
+                    pass
             items = "".join(
                 '<li><a href="%s">%s</a></li>' % (html.escape(quote(fn), quote=True), html.escape(fn))
-                for fn in names
+                for fn in sorted(names)
             )
             body = ("<!DOCTYPE html><html><body><ul>" + items + "</ul></body></html>").encode("utf-8")
             self.send_response(200)
@@ -434,11 +678,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         name = unquote(parsed.path[len("/tools/"):])
         if (not name or name != _safe_filename(name, "") or "/" in name or "\\" in name
-                or not name.lower().endswith((".rhtool.json", ".png", ".jpg", ".jpeg"))):
+                or not name.lower().endswith(TOOL_EXTS + COVER_EXTS)):
             self.send_error(404, "File not found")
             return
-        path = os.path.join(d, name)
-        if not os.path.isfile(path):
+        path = _find_tool_file(name)
+        if not path:
             self.send_error(404, "File not found")
             return
         try:
@@ -522,26 +766,42 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             pass  # 浏览器中途取消（切换图片/关闭）时属正常断开
 
     def _handle_save_cover(self, qs):
-        """保存封面：body 为图片二进制，name 为基名，按 PNG 魔数决定扩展名。"""
+        """保存封面：body 为图片二进制，name 为基名，source 决定写入系统还是用户目录。"""
         base = _safe_filename(unquote((qs.get("name") or [""])[0]), "cover")
+        source = "sys" if str((qs.get("source") or [""])[0]).lower() == "sys" else "user"
         n = int(self.headers.get("Content-Length") or 0)
         data = self.rfile.read(n) if n else b""
         if not data:
             self._send_json(400, {"ok": False, "error": "empty body"})
             return
         ext = ".png" if data[:8] == b"\x89PNG\r\n\x1a\n" else ".jpg"
-        d = _tools_dir()
-        for old_ext in (".png", ".jpg"):
-            if old_ext != ext:
-                try: os.remove(os.path.join(d, base + old_ext))
-                except OSError: pass
-        fn = base + ext
-        with open(os.path.join(d, fn), "wb") as f:
-            f.write(data)
-        self._send_json(200, {"ok": True, "file": fn})
+        d = _source_dir(source)
+        downgraded = False
+        if d is None:
+            d = _user_tools_dir()
+            source, downgraded = "user", True
+
+        def write_to(dir_path):
+            for old_ext in (".png", ".jpg", ".jpeg", ".webp"):
+                if old_ext != ext:
+                    try: os.remove(os.path.join(dir_path, base + old_ext))
+                    except OSError: pass
+            with open(os.path.join(dir_path, base + ext), "wb") as f:
+                f.write(data)
+
+        try:
+            write_to(d)
+        except OSError as e:
+            if source != "sys":
+                self._send_json(500, {"ok": False, "error": str(e)})
+                return
+            d = _user_tools_dir()
+            source, downgraded = "user", True
+            write_to(d)
+        self._send_json(200, {"ok": True, "file": base + ext, "source": source, "downgraded": downgraded})
 
     def _handle_rename_cover(self):
-        """工具改名时同步重命名封面文件。"""
+        """工具改名时同步重命名封面文件（仅在同一来源目录内操作）。"""
         obj = self._read_json_body()
         if obj is None:
             self._send_json(400, {"ok": False, "error": "invalid json"})
@@ -551,22 +811,25 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not old or not new:
             self._send_json(400, {"ok": False, "error": "old/new required"})
             return
-        d = _tools_dir()
+        source = "sys" if str(obj.get("source") or "").lower() == "sys" else "user"
+        d = _source_dir(source)
+        if d is None:
+            d = _user_tools_dir()
         moved = []
-        for ext in (".png", ".jpg"):
+        for ext in COVER_EXTS:
             src = os.path.join(d, old + ext)
             if not os.path.isfile(src):
                 continue
-            for other in (".png", ".jpg"):
+            for other in COVER_EXTS:
                 if other != ext:
                     try: os.remove(os.path.join(d, new + other))
                     except OSError: pass
             os.replace(src, os.path.join(d, new + ext))
             moved.append(new + ext)
-        self._send_json(200, {"ok": True, "files": moved})
+        self._send_json(200, {"ok": True, "files": moved, "source": source})
 
     def _handle_save_tool(self):
-        """把工具配置 JSON 写入 tools 目录，免去浏览器的目录授权。"""
+        """把工具配置 JSON 写入对应目录：source=sys 写系统目录，否则写用户目录。"""
         obj = self._read_json_body()
         if obj is None:
             self._send_json(400, {"ok": False, "error": "invalid json"})
@@ -579,26 +842,43 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             cfg = json.loads(content)
         except Exception:
             cfg = {}
+        source = "sys" if str(obj.get("source") or "").lower() == "sys" else "user"
+        downgraded = False
+        d = _source_dir(source)
+        if d is None:
+            d = _user_tools_dir()
+            source, downgraded = "user", True
         try:
-            with open(os.path.join(_tools_dir(), fn), "w", encoding="utf-8") as f:
+            with open(os.path.join(d, fn), "w", encoding="utf-8") as f:
                 f.write(content)
-        except Exception as e:
-            self._send_json(500, {"ok": False, "error": str(e)})
-            return
-        # 改名时清理旧配置文件；同一应用只保留一份（按 webappId 兜底去重）
+        except OSError as e:
+            if source == "sys":
+                # 安装目录不可写（如被移到受保护目录）：自动改存为用户工具
+                d = _user_tools_dir()
+                source, downgraded = "user", True
+                try:
+                    with open(os.path.join(d, fn), "w", encoding="utf-8") as f:
+                        f.write(content)
+                except OSError as e2:
+                    self._send_json(500, {"ok": False, "error": str(e2)})
+                    return
+            else:
+                self._send_json(500, {"ok": False, "error": str(e)})
+                return
+        # 改名时清理同目录旧文件；同目录内按 webappId 兜底去重，跨目录绝不删除
         removed = []
         old = obj.get("oldFile") or ""
         if old and old != fn:
-            removed += self._remove_tool_files(old)
-        removed += self._remove_duplicate_tools(fn, cfg)
-        self._send_json(200, {"ok": True, "file": fn, "removed": removed})
+            removed += self._remove_tool_files(old, d)
+        removed += self._remove_duplicate_tools(fn, cfg, d)
+        self._send_json(200, {"ok": True, "file": fn, "source": source,
+                              "downgraded": downgraded, "removed": removed})
 
-    def _remove_tool_files(self, fn):
-        """删除配置文件及其同名封面，返回被删除的文件名列表。"""
+    def _remove_tool_files(self, fn, d):
+        """删除指定目录中的配置文件及其同名封面，返回被删除的文件名列表。"""
         fn = _safe_filename(fn, "")
         if not fn:
             return []
-        d = _tools_dir()
         removed = []
         if os.path.isfile(os.path.join(d, fn)):
             try:
@@ -607,7 +887,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             except OSError:
                 pass
             base = re.sub(r"\.rhtool\.json$", "", fn, flags=re.I)
-            for ext in (".png", ".jpg"):
+            for ext in COVER_EXTS:
                 try:
                     os.remove(os.path.join(d, base + ext))
                     removed.append(base + ext)
@@ -615,13 +895,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     pass
         return removed
 
-    def _remove_duplicate_tools(self, keep_fn, cfg):
-        """同一 webappId（缺失时按工具名）的其它配置视为旧版本删除。"""
+    def _remove_duplicate_tools(self, keep_fn, cfg, d):
+        """同一目录内相同 webappId（缺失时按工具名）的旧配置视为历史版本删除。"""
         wid = str(cfg.get("webappId") or "").strip()
         name = str(cfg.get("name") or "").strip()
         if not wid and not name:
             return []
-        d = _tools_dir()
         removed = []
         try:
             entries = os.listdir(d)
@@ -630,32 +909,229 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         for fn in entries:
             if fn == keep_fn or not fn.lower().endswith(".rhtool.json"):
                 continue
-            try:
-                with open(os.path.join(d, fn), encoding="utf-8") as f:
-                    other = json.load(f)
-            except Exception:
+            other = _read_tool_config(os.path.join(d, fn))
+            if other is None:
                 continue
             same = (wid and str(other.get("webappId") or "").strip() == wid) or \
                    (name and str(other.get("name") or "").strip() == name)
             if same:
-                removed += self._remove_tool_files(fn)
+                removed += self._remove_tool_files(fn, d)
         return removed
 
     def _handle_delete_tool(self):
+        """删除工具：sys 写墓碑隐藏（更新后可恢复），user 直接删除配置与封面。"""
         obj = self._read_json_body()
         if obj is None:
             self._send_json(400, {"ok": False, "error": "invalid json"})
             return
         fn = _safe_filename(obj.get("file"), "")
-        if fn:
-            try: os.remove(os.path.join(_tools_dir(), fn))
-            except OSError: pass
-            # 永久删除工具时一并清理同名封面 tools/<基名>.png|jpg
-            base = re.sub(r"\.rhtool\.json$", "", fn, flags=re.I)
-            for ext in (".png", ".jpg"):
-                try: os.remove(os.path.join(_tools_dir(), base + ext))
-                except OSError: pass
+        source = "sys" if str(obj.get("source") or "").lower() == "sys" else "user"
+        if fn and source == "sys":
+            cfg = _read_tool_config(os.path.join(SYS_TOOLS_DIR, fn))
+            wid = str((cfg or {}).get("webappId") or "").strip()
+            if wid:
+                ids = _read_tombstones()
+                ids.add(wid)
+                _write_tombstones(ids)
+            else:
+                self._remove_tool_files(fn, SYS_TOOLS_DIR)
+        elif fn:
+            self._remove_tool_files(fn, _user_tools_dir())
         self._send_json(200, {"ok": True})
+
+    def _handle_tool_tombstone(self):
+        """系统工具墓碑：deleted=true 隐藏，false 恢复。"""
+        obj = self._read_json_body()
+        if obj is None:
+            self._send_json(400, {"ok": False, "error": "invalid json"})
+            return
+        wid = str(obj.get("webappId") or "").strip()
+        if not wid:
+            self._send_json(400, {"ok": False, "error": "webappId required"})
+            return
+        ids = _read_tombstones()
+        if obj.get("deleted", True):
+            ids.add(wid)
+        else:
+            ids.discard(wid)
+        _write_tombstones(ids)
+        self._send_json(200, {"ok": True})
+
+    def _handle_copy_tool(self):
+        """把系统工具（配置+封面）复制为用户工具，之后编辑不受更新影响。"""
+        obj = self._read_json_body()
+        if obj is None:
+            self._send_json(400, {"ok": False, "error": "invalid json"})
+            return
+        fn = _safe_filename(obj.get("file"), "")
+        if not fn.lower().endswith(".rhtool.json"):
+            self._send_json(400, {"ok": False, "error": "invalid tool file"})
+            return
+        src_dir = None
+        for d in (SYS_TOOLS_DIR, _user_tools_dir()):
+            if os.path.isfile(os.path.join(d, fn)):
+                src_dir = d
+                break
+        if not src_dir:
+            self._send_json(404, {"ok": False, "error": "工具配置不存在"})
+            return
+        cfg = _read_tool_config(os.path.join(src_dir, fn))
+        if cfg is None:
+            self._send_json(400, {"ok": False, "error": "工具配置损坏"})
+            return
+        base = re.sub(r"\.rhtool\.json$", "", fn, flags=re.I)
+        target_base = base
+        n = 0
+        # 两个目录都检查，避免覆盖系统工具或已有用户工具
+        while any(os.path.isfile(os.path.join(d, target_base + ".rhtool.json"))
+                  for d in (SYS_TOOLS_DIR, USER_TOOLS_DIR)):
+            n += 1
+            target_base = base + (" (我的)" if n == 1 else " (我的 %d)" % n)
+        if target_base != base:
+            cfg["name"] = target_base
+        target_fn = target_base + ".rhtool.json"
+        try:
+            with open(os.path.join(_user_tools_dir(), target_fn), "w", encoding="utf-8") as f:
+                json.dump(cfg, f, ensure_ascii=False, indent=2)
+        except OSError as e:
+            self._send_json(500, {"ok": False, "error": str(e)})
+            return
+        for ext in COVER_EXTS:
+            src = os.path.join(src_dir, base + ext)
+            if os.path.isfile(src):
+                try:
+                    shutil.copy2(src, os.path.join(_user_tools_dir(), target_base + ext))
+                except OSError:
+                    pass
+                break
+        self._send_json(200, {"ok": True, "file": target_fn, "source": "user",
+                              "name": cfg.get("name") or target_base})
+
+    def _handle_reset_sys_tools(self):
+        """重置系统工具：备份现有目录 → 清空 → 解压 sys_tools.zip → 清墓碑。"""
+        if not os.path.isfile(SYS_ZIP):
+            self._send_json(400, {"ok": False, "error": "未找到 sys_tools.zip，无法重置"})
+            return
+        try:
+            zf = zipfile.ZipFile(SYS_ZIP)
+            zf.infolist()
+        except (OSError, zipfile.BadZipFile) as e:
+            self._send_json(400, {"ok": False, "error": "sys_tools.zip 损坏：" + str(e)})
+            return
+        backup = ""
+        try:
+            if os.path.isdir(SYS_TOOLS_DIR):
+                backup = os.path.join(DATA_DIR, "backup", "sys-" + time.strftime("%Y%m%d_%H%M%S"))
+                shutil.copytree(SYS_TOOLS_DIR, backup)
+            os.makedirs(SYS_TOOLS_DIR, exist_ok=True)
+            for fn in os.listdir(SYS_TOOLS_DIR):
+                p = os.path.join(SYS_TOOLS_DIR, fn)
+                if os.path.isfile(p) and fn.lower().endswith(TOOL_EXTS + COVER_EXTS):
+                    try: os.remove(p)
+                    except OSError: pass
+            restored = 0
+            with zf as z:
+                for info in z.infolist():
+                    name = info.filename.replace("\\", "/")
+                    parts = [p for p in name.split("/") if p and p != "."]
+                    if not parts or name.startswith("/") or ".." in parts or info.is_dir():
+                        continue
+                    target = os.path.join(SYS_TOOLS_DIR, *parts)
+                    os.makedirs(os.path.dirname(target), exist_ok=True)
+                    with z.open(info) as src, open(target, "wb") as dst:
+                        shutil.copyfileobj(src, dst)
+                    restored += 1
+            _write_tombstones(set())
+            self._send_json(200, {"ok": True, "restored": restored, "backup": backup})
+        except OSError as e:
+            self._send_json(500, {"ok": False, "error": str(e), "backup": backup})
+
+    # ---------- 自动更新 ----------
+    def _handle_update_check(self):
+        try:
+            manifest = _fetch_update_manifest()
+        except Exception as e:
+            self._send_json(200, {"ok": False, "error": "检查更新失败：" + str(e)})
+            return
+        latest = str(manifest.get("version") or "")
+        installer = manifest.get("installer") or {}
+        self._send_json(200, {
+            "ok": True,
+            "current": APP_VERSION,
+            "latest": latest,
+            "hasUpdate": _version_key(latest) > _version_key(APP_VERSION),
+            "date": manifest.get("date") or "",
+            "notes": manifest.get("notes") or "",
+            "size": int(installer.get("size") or 0),
+            "page": manifest.get("page") or "",
+        })
+
+    def _handle_update_download(self):
+        obj = self._read_json_body()
+        if obj is None:
+            self._send_json(400, {"ok": False, "error": "invalid json"})
+            return
+        manifest = obj.get("manifest")
+        if not isinstance(manifest, dict):
+            # 允许前端不传清单：服务端自己重新拉取
+            try:
+                manifest = _fetch_update_manifest()
+            except Exception as e:
+                self._send_json(500, {"ok": False, "error": str(e)})
+                return
+        installer = manifest.get("installer") or {}
+        if not (installer.get("urls") or []):
+            self._send_json(400, {"ok": False, "error": "更新清单缺少下载地址"})
+            return
+        with _UPDATE_LOCK:
+            if _UPDATE_STATE.get("state") == "downloading":
+                self._send_json(409, {"ok": False, "error": "正在下载中"})
+                return
+            _UPDATE_STATE.update({"state": "starting", "received": 0, "total": 0,
+                                  "percent": 0, "source": "", "error": "",
+                                  "version": str(manifest.get("version") or ""),
+                                  "sha256": "", "size": 0})
+        _UPDATE_CANCEL.clear()
+        threading.Thread(target=_download_update_worker, args=(manifest,), daemon=True).start()
+        self._send_json(200, {"ok": True})
+
+    def _handle_update_install(self):
+        state = _update_state_snapshot()
+        if state.get("state") != "ready":
+            self._send_json(400, {"ok": False, "error": "安装包尚未下载完成"})
+            return
+        path = os.path.join(UPDATE_DIR, UPDATE_FILE_NAME)
+        if not os.path.isfile(path):
+            self._send_json(400, {"ok": False, "error": "安装包不存在，请重新下载"})
+            return
+        size = os.path.getsize(path)
+        digest = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                digest.update(chunk)
+        if state.get("sha256") and digest.hexdigest().lower() != state["sha256"]:
+            self._send_json(400, {"ok": False, "error": "安装包校验失败，请重新下载"})
+            return
+        if state.get("size") and size != state["size"]:
+            self._send_json(400, {"ok": False, "error": "安装包大小不符，请重新下载"})
+            return
+        self._send_json(200, {"ok": True})
+
+        def run():
+            time.sleep(0.4)
+            hook = UPDATE_INSTALL_HOOK
+            try:
+                if hook:
+                    hook(path)
+                else:
+                    subprocess.Popen([path, "/VERYSILENT", "/SUPPRESSMSGBOXES",
+                                      "/NORESTART", "/SP-"], close_fds=True)
+                    time.sleep(0.5)
+                    os._exit(0)
+            except Exception as e:
+                print("[server] update install failed: " + str(e), file=sys.stderr)
+
+        threading.Thread(target=run, daemon=True).start()
 
     def _handle_save_image(self):
         """服务端直接把生成结果下载到已配置的下载目录，浏览器无需授权文件夹。"""
@@ -685,6 +1161,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def _handle_appinfo(self):
         info = _load_appinfo()
+        info["tools"] = _user_tools_dir()  # 工具配置统一由服务端管理，不再使用 appinfo 旧路径
         info["app"] = "runninghub"
         info["session"] = SESSION_ID
         info["token"] = ACCESS_TOKEN
@@ -757,6 +1234,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+        self.wfile.flush()  # 安装更新会随即退出进程，必须确保响应已发出
 
     def log_message(self, *args):
         pass  # 静默日志

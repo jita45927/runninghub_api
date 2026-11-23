@@ -1,6 +1,7 @@
 // ================= 工具首页：按分类展示封面卡片，与工作页互斥切换 =================
 import { state, saveActiveId, saveCats, tagsOf } from "../store.js";
 import { coverUrlFor, refreshCoverIndex, saveCover } from "../covers.js";
+import { toolSourceOf } from "../tools.js";
 import { trashTool, sortCatNames } from "./toollist.js";
 
 let rerender = null;          // 入口传入的 renderAll，用于卡片点击后刷新全页
@@ -60,10 +61,11 @@ function pickCoverFor(t) {
       }
       if (file.size > 8 * 1024 * 1024) { toast("封面图片不能超过 8MB"); return; }
       try {
-        const fn = await saveCover(tool.name, file);
+        const src = toolSourceOf(tool);
+        const fn = await saveCover(tool.name, file, src);
         await refreshCoverIndex();
         renderHome();
-        toast("封面已保存到 tools/" + fn);
+        toast("封面已保存到" + (src === "sys" ? "系统工具" : "我的工具") + "目录/" + fn);
       } catch (err) {
         if (/授权/.test(err.message)) {
           if (confirm(err.message + "\n\n现在前往授权 tools 目录？")) {
@@ -106,7 +108,7 @@ function buildCover(t) {
   const up = document.createElement("button");
   up.type = "button";
   up.className = "home-cover-upload";
-  up.title = "上传封面（自动裁剪缩放为 3:4，保存为 tools/工具名.png 或 .jpg）";
+  up.title = "上传封面（自动裁剪缩放为 3:4，保存到对应工具目录）";
   up.textContent = "📷 封面";
   up.onclick = e => { e.stopPropagation(); pickCoverFor(t); };
   box.appendChild(up);

@@ -23,7 +23,9 @@ export function importToolFile(file, renderAll) {
     try {
       const data = JSON.parse(ev.target.result);
       if (!data || !Array.isArray(data.fields)) throw new Error("文件格式不对");
-      const idx = state.tools.findIndex(x => (data.webappId && x.webappId === data.webappId) || (data.name && x.name === data.name));
+      // 导入一律作为「我的工具」：只更新已有的用户工具，不覆盖系统工具
+      const idx = state.tools.findIndex(x => toolSourceOf(x) !== "sys"
+        && ((data.webappId && x.webappId === data.webappId) || (data.name && x.name === data.name)));
       const merged = {
         icon: data.icon || "🧩",
         name: data.name || file.name.replace(/\.rhtool\.json$/i, "").replace(/\.json$/i, ""),
@@ -53,7 +55,7 @@ export function importToolFile(file, renderAll) {
       (async () => {
         try {
           const fn = await persistTool(tool);
-          if (fn) showStatus("已导入并保存到 tools/" + fn, "ok");
+          if (fn) showStatus("已导入并保存到我的工具目录/" + fn, "ok");
         } catch (err) { showStatus("写入配置目录失败：" + err.message, "error"); }
       })();
     } catch (err) {
@@ -69,6 +71,12 @@ export async function resetToolsCache(renderAll) {
   try { localStorage.removeItem("tools"); } catch (e) {}
   state.tools = [];
   state.toolFileNames = {};
+  state.toolSources = {};
+  // 本地服务模式以 /tools-index 为唯一数据源，旧目录句柄不再参与
+  if (location.protocol.startsWith("http")) {
+    await scanToolsDir(renderAll);
+    return state.tools.length > 0;
+  }
   if (await toolsDirGranted()) {
     if (await loadToolsFromDir(renderAll)) return state.tools.length > 0;
   }
@@ -77,43 +85,116 @@ export async function resetToolsCache(renderAll) {
   return state.tools.length > 0;
 }
 
-// ============ 本地服务器模式：自动加载 tools 目录下所有配置文件 ============
-// file:// 双击打开时浏览器禁止读目录，此逻辑不生效，仍需手动导入
+// ============ 本地服务器模式：按合并索引加载系统工具 + 我的工具 ============
+// /tools-index 已处理：用户工具优先、同 webappId 隐藏系统原版、墓碑删除不返回
 export async function scanToolsDir(renderAll) {
   if (!location.protocol.startsWith("http")) return;
   try {
-    const html = await (await fetch("tools/")).text();
-    const files = [...html.matchAll(/href="([^"]+\.rhtool\.json)"/gi)]
-      .map(m => decodeURIComponent(m[1]).split("/").pop());
-    let changed = false;
+    const r = await fetch("tools-index");
+    if (!r.ok) return;
+    const index = await r.json();
+    if (!index || !Array.isArray(index.files)) return;
+
+    // 同一配置文件保留原来的本地 id，避免选中状态/排序在刷新后跳变
+    const prevIdByFile = new Map();
+    state.tools.forEach(t => {
+      const f = state.toolFileNames[t.id];
+      if (f) prevIdByFile.set(f, t.id);
+    });
+
+    const nextTools = [];
+    const nextNames = {};
+    const nextSources = {};
     let n = 0;
-    for (const f of files) {
+    for (const entry of index.files) {
+      const f = entry.file;
       let t;
       try {
-        t = await (await fetch("tools/" + encodeURIComponent(f))).json();
+        const resp = await fetch("tools/" + encodeURIComponent(f));
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        t = await resp.json();
         if (!t || typeof t !== "object") throw new Error("配置格式不对");
       } catch (e) {
         showStatus("⚠️ 配置文件「" + f + "」损坏，已跳过加载", "error");  // 单个文件损坏不影响其余加载
         continue;
       }
-      if (!t.id) t.id = "t" + Date.now() + "_" + n++;  // 配置文件没有 id 时自动补一个
+      const id = prevIdByFile.get(f) || "t" + Date.now() + "_" + n++;
+      t.id = id;
       t.tags = tagsOf(t);
       delete t.category;  // 旧版单值分类统一迁移为标签数组
       migrateSeedFields(t);  // 旧的 seed 数字字段升级为随机种子字段
-      // 同应用ID或同名视为同一工具：以文件内容为准更新（保证 tools 目录是权威配置）
-      const idx = state.tools.findIndex(x => (t.webappId && x.webappId === t.webappId) || (t.name && x.name === t.name));
-      if (idx >= 0) {
-        const keepId = state.tools[idx].id;
-        state.tools[idx] = { ...t, id: keepId };
-        state.toolFileNames[keepId] = f;  // 记录真实文件名，改名/删除时按它操作
-      } else {
-        state.tools.push(t);
-        state.toolFileNames[t.id] = f;
-      }
-      changed = true;
+      nextTools.push(t);
+      nextNames[id] = f;  // 记录真实文件名，改名/删除时按它操作
+      nextSources[id] = entry.source === "sys" ? "sys" : "user";
     }
-    if (changed) { saveTools(); renderAll(); }
-  } catch (e) { /* tools 目录不存在或为空时忽略 */ }
+    state.tools = nextTools;
+    state.toolFileNames = nextNames;
+    state.toolSources = nextSources;
+    if (!state.tools.some(t => t.id === state.activeId)) {
+      state.activeId = state.tools.length ? state.tools[0].id : null;
+      saveActiveId();
+    }
+    saveTools();
+    renderAll();
+  } catch (e) { /* 旧版服务没有该接口时保持本地缓存 */ }
+}
+
+// 工具来源：sys（系统工具，随更新覆盖）| user（我的工具，永久保留）
+export function toolSourceOf(tool) {
+  return (tool && state.toolSources[tool.id] === "sys") ? "sys" : "user";
+}
+
+// 系统工具墓碑：删除/还原后刷新时保持一致
+export async function setToolTombstone(webappId, deleted) {
+  if (!webappId) return false;
+  if (!location.protocol.startsWith("http")) return false;
+  try {
+    const r = await localFetch("/tool-tombstone", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ webappId, deleted: !!deleted })
+    });
+    return r.ok;
+  } catch (e) { return false; }
+}
+
+// 复制为我的工具：系统工具配置与封面复制到 user_tools
+export async function copyToolToUser(tool, renderAll) {
+  if (!tool) return null;
+  const file = state.toolFileNames[tool.id] || toolFileName(tool);
+  try {
+    const r = await localFetch("/copy-tool", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ file })
+    });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || "复制失败");
+    await scanToolsDir(renderAll);
+    const newId = Object.keys(state.toolFileNames).find(id => state.toolFileNames[id] === j.file);
+    if (newId) state.activeId = newId;
+    saveActiveId();
+    if (renderAll) renderAll();
+    return j;
+  } catch (e) {
+    showStatus("复制为我的工具失败：" + e.message, "error");
+    return null;
+  }
+}
+
+// 重置系统工具：用安装包内 sys_tools.zip 恢复并清空墓碑
+export async function resetSysTools(renderAll) {
+  try {
+    const r = await localFetch("/reset-sys-tools", { method: "POST" });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || "重置失败");
+    await resetToolsCache(renderAll);
+    showStatus("系统工具已重置，恢复 " + (j.restored || 0) + " 个文件", "ok");
+    return true;
+  } catch (e) {
+    showStatus("重置系统工具失败：" + e.message, "error");
+    return false;
+  }
 }
 
 // ============ 配置目录授权模式：File System Access API 直接读写 tools 目录 ============
@@ -201,15 +282,17 @@ export async function persistTool(t) {
   if (location.protocol.startsWith("http")) {
     try {
       const file = toolFileName(t);
+      const source = toolSourceOf(t);
       const r = await localFetch("/save-tool", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ file, oldFile: state.toolFileNames[t.id] || "", content: toolToConfigJSON(t) })
+        body: JSON.stringify({ file, oldFile: state.toolFileNames[t.id] || "", source, content: toolToConfigJSON(t) })
       });
       if (r.ok) {
         const j = await r.json();
         if (j && j.ok) {
           state.toolFileNames[t.id] = j.file || file;  // 服务端可能已清理旧文件
+          state.toolSources[t.id] = j.source === "sys" ? "sys" : "user";  // sys 不可写时服务端会降级
           return j.file || file;
         }
       }
@@ -219,7 +302,7 @@ export async function persistTool(t) {
   return null;
 }
 
-// 删除工具配置文件：优先交给本地服务
+// 删除工具配置文件：sys 由服务端写墓碑隐藏，user 直接删除
 export async function removeToolFile(tool) {
   if (!tool) return false;
   if (location.protocol.startsWith("http")) {
@@ -227,7 +310,7 @@ export async function removeToolFile(tool) {
       const r = await localFetch("/delete-tool", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ file: state.toolFileNames[tool.id] || toolFileName(tool) })
+        body: JSON.stringify({ file: state.toolFileNames[tool.id] || toolFileName(tool), source: toolSourceOf(tool) })
       });
       if (r.ok) {
         delete state.toolFileNames[tool.id];

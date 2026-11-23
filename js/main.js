@@ -8,7 +8,8 @@ import { renderHome, showHomeView, showWorkView, setToolSearch } from "./ui/home
 import { initLightbox } from "./ui/lightbox.js";
 import { initModals, initSetupWizard } from "./ui/modal.js";
 import { appPanel, refreshKeyBtn } from "./ui/panels.js";
-import { scanToolsDir, loadToolsFromDir, toolsDirGranted, resetToolsCache, persistTool } from "./tools.js";
+import { scanToolsDir, loadToolsFromDir, toolsDirGranted, resetToolsCache, persistTool, resetSysTools } from "./tools.js";
+import { initUpdate } from "./update.js";
 import { runActiveTool, queueActiveTool, cancelCurrentRun, clearQueuedRuns, restoreResultsSession } from "./runner.js";
 import { localFetch, setLocalToken } from "./api.js";
 
@@ -195,6 +196,8 @@ async function grantToolsDir() {
 
 // 配置目录状态初始化（授权入口已统一到顶栏「初始设置」）
 function initToolsDirState() {
+  // 本地服务模式：系统工具/我的工具由 server 合并提供，不再使用浏览器目录授权
+  if (location.protocol.startsWith("http")) { scanToolsDir(renderAll); return; }
   if (!window.showDirectoryPicker) { scanToolsDir(renderAll); return; }
   (async () => {
     try {
@@ -212,10 +215,19 @@ function initToolsDirState() {
 
 // 重置工具缓存：解决旧缓存与 tools 目录配置不一致（如全部显示「待配置」）
 document.getElementById("resetToolsBtn").onclick = async () => {
-  if (!confirm("将清除浏览器中的工具列表缓存，并按 tools 目录重新加载全部工具配置。\n\n不会删除任何配置文件，也不会影响 API Key。是否继续？")) return;
+  if (!confirm("将清除浏览器中的工具列表缓存，并按系统工具 + 我的工具重新加载全部配置。\n\n不会删除任何配置文件，也不会影响 API Key。是否继续？")) return;
   const ok = await resetToolsCache(renderAll);
   if (ok) showStatus("已重置缓存，并重新加载 " + state.tools.length + " 个工具", "ok");
-  else showStatus("缓存已清空，但未读到工具配置，请检查 tools 目录或点击「配置目录」授权", "err");
+  else showStatus("缓存已清空，但未读到工具配置，请检查 sys_tools / user_tools 目录", "err");
+};
+
+// 重置系统工具：从安装包内的 sys_tools.zip 恢复，并清除删除记录
+document.getElementById("resetSysToolsBtn").onclick = async () => {
+  if (!confirm("将用安装包内的 sys_tools.zip 覆盖恢复全部系统工具，并清除已删除记录。\n\n「我的工具」和下载结果不受影响。是否继续？")) return;
+  const btn = document.getElementById("resetSysToolsBtn");
+  btn.disabled = true;
+  try { await resetSysTools(renderAll); }
+  finally { btn.disabled = false; }
 };
 
 // ================= 退出程序（仅本地服务模式） =================
@@ -532,6 +544,7 @@ initOpenDirButton();
 initQuitButton();
 initExternalLinks();
 initToolsDirState();
+initUpdate();
 refreshKeyBtn();
 initPromptWeight();
 renderAll();

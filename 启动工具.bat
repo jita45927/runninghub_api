@@ -11,7 +11,7 @@ rem   Line 2 = ?????????????? FolderBrowserDialog?
 rem ----------------------------------------------------------
 powershell -NoProfile -STA -Command ^
   "Add-Type -AssemblyName System.Windows.Forms;" ^
-  "$tools = Join-Path $env:RH_APP_DIR 'tools';" ^
+  "$tools = Join-Path $env:RH_APP_DIR 'user_tools';" ^
   "$fallback = Join-Path $env:RH_APP_DIR 'download';" ^
   "$dl = '';" ^
   "if (Test-Path 'appinfo.txt') {" ^

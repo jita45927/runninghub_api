@@ -2,6 +2,7 @@
 import { LS, esc } from "../config.js";
 import { getAccountStatus } from "../api.js";
 import { coverPreviewUrl, coverUrlFor, refreshCoverIndex, renameCover, saveCover } from "../covers.js";
+import { toolSourceOf } from "../tools.js";
 import { showStatus } from "./form.js";
 import { renderHome, showWorkView } from "./home.js";
 
@@ -112,7 +113,7 @@ function initCoverPicker() {
       pendingPreviewUrl = url;
       setCoverPreview(url);
       const hint = document.getElementById("coverHint");
-      if (hint) hint.textContent = "预览为最终裁剪效果（3:4）；保存工具后写入 tools 目录";
+      if (hint) hint.textContent = "预览为最终裁剪效果（3:4）；保存工具后写入对应工具目录";
     } catch (err) {
       pendingCoverFile = null;
       setCoverPreview(null);
@@ -137,6 +138,11 @@ function openTool(t) {
   setCoverPreview(t && t.name ? coverUrlFor(t.name) : null);
   const hint = document.getElementById("coverHint");
   if (hint) hint.textContent = "支持 PNG / JPG，自动居中裁剪缩放为 3:4（600×800），≤8MB";
+  const sysHint = document.getElementById("sysToolHint");
+  if (sysHint) {
+    sysHint.style.display = t && toolSourceOf(t) === "sys" ? "" : "none";
+    sysHint.textContent = "这是系统工具：修改会写回系统目录，并在程序更新时被整体覆盖。想长期保留修改，请先在左侧点 ⧉ 复制为我的工具。";
+  }
 
   document.getElementById("tWebappId").value = t ? t.webappId : "";
   document.getElementById("tToolType").value = t ? (t.toolType || "app") : "app";
@@ -145,16 +151,16 @@ function openTool(t) {
 }
 
 // 工具保存后：写入新封面或跟随改名，然后刷新首页并进入工作页
-async function afterToolSave(tool, prevName) {
+async function afterToolSave(tool, prevName, source) {
   if (!tool) return;
   try {
     if (pendingCoverFile) {
-      const fn = await saveCover(tool.name, pendingCoverFile);
+      const fn = await saveCover(tool.name, pendingCoverFile, source);
       clearPendingCover();
-      showStatus("封面已保存到 tools/" + fn, "success");
+      showStatus("封面已保存到 " + (source === "sys" ? "系统工具" : "我的工具") + " 目录/" + fn, "success");
     } else if (prevName && prevName !== tool.name) {
-      const fn = await renameCover(prevName, tool.name);
-      if (fn) showStatus("封面已重命名为 tools/" + fn, "success");
+      const fn = await renameCover(prevName, tool.name, source);
+      if (fn) showStatus("封面已随工具重命名为 " + fn, "success");
     }
   } catch (err) {
     showStatus("封面保存失败：" + err.message, "error");

@@ -64,6 +64,7 @@
     </div>
     <button class="key-btn" id="homeBtn">🏠 工具首页</button>
     <button class="key-btn" id="setupBtn">🧭 初始设置</button>
+    <button class="key-btn ghost" id="checkUpdateBtn" style="display:none" title="检查程序更新">🔄 检查更新</button>
     <button class="key-btn ghost" id="openDirBtn" style="display:none">🔍 打开下载目录</button>
     <button class="key-btn ghost" id="quitBtn" style="display:none" title="停止本地服务并退出程序">⏻ 退出程序</button>
     <button class="key-btn" id="keyBtn"><span class="key-dot" id="keyDot"></span><span id="keyBtnText">API Key 未设置</span></button>
@@ -170,6 +171,7 @@
       每个工具对应一个 RunningHub AI 应用。打开应用详情页点「API 调用」，把示例中 nodeInfoList 的每个节点，
       在下面添加为对应的输入项（节点 ID 和字段名照抄即可）。
     </div>
+    <div id="sysToolHint" style="display:none;margin:0 0 12px;padding:9px 12px;border-radius:8px;background:rgba(240,180,41,.12);border:1px solid rgba(240,180,41,.35);color:#f0b429;font-size:12.5px;line-height:1.6"></div>
     <div class="field-row">
       <div class="field" style="flex:0 0 90px">
         <label>图标</label>
@@ -189,7 +191,7 @@
       </div>
     </div>
     <div class="field">
-      <label>封面图（工具首页展示，自动裁剪为 3:4，保存到 tools/工具名.png 或 .jpg）</label>
+      <label>封面图（工具首页展示，自动裁剪为 3:4，保存到对应工具目录/工具名.png 或 .jpg）</label>
       <div class="cover-edit">
         <div class="cover-edit-preview" id="coverPreview">暂无封面</div>
         <div class="cover-edit-side">
@@ -323,7 +325,7 @@
       <h4>七、保存后会发生什么</h4>
       <ul>
         <li>工具立刻出现在左侧列表，可拖动排序、可改标签；</li>
-        <li>已授权「配置目录」时，会同时写入 <code>tools/工具名.rhtool.json</code>，下次启动自动读取；</li>
+        <li>本地服务会自动把系统工具与我的工具合并读取；新建/导入/复制的工具写入用户工具目录 <code>user_tools/</code>；</li>
         <li>未授权配置目录时，配置只存在浏览器里，换电脑需用「导入配置文件」迁移。</li>
       </ul>
 
@@ -399,13 +401,14 @@
 <div class="modal-mask" id="setupModal">
   <div class="modal" style="width:560px">
     <h3>🧭 初始设置</h3>
-    <div class="modal-sub">通过「启动工具.bat」运行时，工具配置由本地服务直接写入 tools 目录，无需授权；下载目录只需选择一次。</div>
+    <div class="modal-sub">系统工具随程序发布并自动更新；你自己的工具保存在「我的工具」目录，永远不会被更新覆盖。</div>
     <div class="setup-step" id="setupStepToolsDir">
       <div class="setup-step-num">1</div>
       <div class="setup-step-body">
         <div class="setup-step-name">工具配置目录</div>
-        <div class="setup-step-desc">工具配置直接写入程序目录下的 <b>tools</b> 文件夹。用「启动工具.bat」启动时由本地服务自动完成，无需点授权。</div>
+        <div class="setup-step-desc">系统工具读取安装目录 <b>sys_tools</b>；新建、导入、复制的工具写入数据目录 <b>user_tools</b>。本地服务会自动完成，无需授权。</div>
         <div class="setup-step-desc" id="toolsDirPathHint" style="color:#8ab4ff;overflow-wrap:anywhere"></div>
+        <button class="btn ghost" id="resetSysToolsBtn" style="margin-top:8px" title="用安装包内的 sys_tools.zip 恢复全部系统工具，并清除删除记录">♻️ 重置系统工具</button>
       </div>
       <div class="setup-step-actions">
         <div class="setup-step-status" id="setupToolsDirStatus">⚠️ 未授权</div>
@@ -429,6 +432,27 @@
       <div></div>
       <div class="right">
         <button class="btn ghost" data-close="setupModal">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 检查更新弹窗 -->
+<div class="modal-mask" id="updateModal">
+  <div class="modal" style="width:560px">
+    <h3>🔄 程序更新</h3>
+    <div class="modal-sub" id="updateVersion">正在检查最新版本…</div>
+    <div class="update-notes" id="updateNotes"></div>
+    <div class="update-bar"><div class="update-bar-fill" id="updateBarFill"></div></div>
+    <div class="update-meta" id="updateStatus"></div>
+    <div class="modal-actions">
+      <div>
+        <button class="btn ghost" id="updateManualBtn" style="display:none">手动下载</button>
+        <button class="btn ghost" id="updateCancelBtn" style="display:none">取消下载</button>
+      </div>
+      <div class="right">
+        <button class="btn ghost" id="updateLaterBtn" data-close="updateModal">稍后</button>
+        <button class="btn" id="updateNowBtn" style="display:none">立即更新</button>
       </div>
     </div>
   </div>
