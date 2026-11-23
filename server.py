@@ -24,7 +24,7 @@ def _data_dir():
 
 
 os.chdir(_app_dir())
-APP_VERSION = "1.0.3"  # 版本号唯一来源：打包脚本、更新清单与界面均读取此处
+APP_VERSION = "1.0.4"  # 版本号唯一来源：打包脚本、更新清单与界面均读取此处
 BASE_DIR = _app_dir()
 DATA_DIR = _data_dir()
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -45,11 +45,13 @@ COVER_EXTS = (".png", ".jpg", ".jpeg", ".webp")
 # ===== 自动更新 =====
 UPDATE_MANIFEST_URLS = [
     "https://gitee.com/matt8469/runninghub_api/raw/master/update/latest.json",
+    "https://cdn.jsdelivr.net/gh/jita45927/runninghub_api@master/update/latest.json",
     "https://raw.githubusercontent.com/jita45927/runninghub_api/master/update/latest.json",
 ]
 UPDATE_ALLOWED_HOSTS = {"gitee.com", "giteeusercontent.com", "raw.githubusercontent.com",
                         "github.com", "objects.githubusercontent.com",
-                        "github-releases.githubusercontent.com", "aliyuncs.com"}
+                        "github-releases.githubusercontent.com", "cdn.jsdelivr.net",
+                        "aliyuncs.com"}
 UPDATE_DIR = os.path.join(DATA_DIR, "update")
 UPDATE_FILE_NAME = "RunningHubToolbox-update.exe"
 UPDATE_INSTALL_HOOK = None  # 由 launcher 注入：关闭窗口/托盘后静默安装并退出
@@ -433,9 +435,10 @@ def _validate_update_url(url):
     return url
 
 def _fetch_update_manifest():
-    """按 Gitee → GitHub 顺序拉取清单，全部失败时抛出最后一个错误。"""
-    last = None
+    """按 Gitee → jsDelivr → GitHub 顺序拉取清单，全部失败时汇总各源错误。"""
+    errors = []
     for url in UPDATE_MANIFEST_URLS:
+        host = urlparse(url).hostname or url
         try:
             _validate_update_url(url)
             req = urllib.request.Request(url, headers={"User-Agent": "RunningHubToolbox/%s" % APP_VERSION})
@@ -443,11 +446,11 @@ def _fetch_update_manifest():
                 _validate_update_url(r.geturl() or url)
                 obj = json.loads(r.read().decode("utf-8"))
             if not isinstance(obj, dict) or not obj.get("version"):
-                raise ValueError("更新清单格式不正确")
+                raise ValueError("清单格式不正确")
             return obj
         except Exception as e:
-            last = e
-    raise last or RuntimeError("无法获取更新清单")
+            errors.append("%s：%s" % (host, e))
+    raise RuntimeError("无法获取更新清单，请检查网络后重试（%s）" % "；".join(errors))
 
 def _update_state_snapshot():
     with _UPDATE_LOCK:
@@ -466,7 +469,7 @@ def _download_update_worker(manifest):
     os.makedirs(UPDATE_DIR, exist_ok=True)
     final = os.path.join(UPDATE_DIR, UPDATE_FILE_NAME)
     part = final + ".part"
-    last_err = ""
+    errors = []
     for url in urls:
         if _UPDATE_CANCEL.is_set():
             _set_update_state(state="cancelled")
@@ -507,10 +510,11 @@ def _download_update_worker(manifest):
             _set_update_state(state="cancelled", error="")
             return
         except Exception as e:
-            last_err = str(e)
+            errors.append("%s：%s" % (urlparse(url).hostname or url, e))
             try: os.remove(part)
             except OSError: pass
-    _set_update_state(state="error", error=last_err or "下载失败")
+    _set_update_state(state="error", error="下载失败，请检查网络或手动下载（%s）" % "；".join(errors)
+                      if errors else "下载失败")
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -1051,7 +1055,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         try:
             manifest = _fetch_update_manifest()
         except Exception as e:
-            self._send_json(200, {"ok": False, "error": "检查更新失败：" + str(e)})
+            self._send_json(200, {"ok": False, "error": str(e)})
             return
         latest = str(manifest.get("version") or "")
         installer = manifest.get("installer") or {}
