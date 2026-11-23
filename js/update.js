@@ -191,8 +191,10 @@ export function initUpdate() {
   if (cancelBtn) cancelBtn.onclick = cancelDownload;
   const laterBtn = $("updateLaterBtn");
   if (laterBtn) laterBtn.onclick = () => {
-    // 安装倒计时期间关闭弹窗等同于取消倒计时
+    // 下载中或安装倒计时期间点「稍后」：先取消，再关闭弹窗
     if (countdownTimer) { stopPolling(); setStatus("已取消本次自动安装，可稍后重新检查更新。"); }
+    if (polling) cancelDownload();
+    $("updateModal").classList.remove("show");
   };
   // 启动静默检查：失败不打扰用户
   checkUpdate(true);
