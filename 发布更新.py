@@ -1,7 +1,7 @@
 """生成自动更新清单，并可发布到独立 release 分支、创建 GitHub Release。
 
 用法：
-  python 发布更新.py --generate-only   只生成 update/latest.json（打包脚本会调用）
+  python 发布更新.py --generate-only   只生成 build/latest.json（打包脚本会调用）
   python 发布更新.py                    生成清单并打印发版步骤
   python 发布更新.py --publish          把清单提交到 release 分支并推送到 GitHub/Gitee
   python 发布更新.py --publish --github 同时用 gh 创建 GitHub Release、上传安装包
@@ -44,7 +44,7 @@ def load_notes(version):
     if os.path.isfile(p):
         with open(p, encoding="utf-8") as f:
             return f.read().strip()
-    manifest = os.path.join(ROOT, "update", "latest.json")
+    manifest = os.path.join(ROOT, "build", "latest.json")
     try:
         with open(manifest, encoding="utf-8") as f:
             old = json.load(f)
@@ -80,7 +80,7 @@ def build_manifest(version):
 
 
 def write_manifest(manifest):
-    d = os.path.join(ROOT, "update")
+    d = os.path.join(ROOT, "build")
     os.makedirs(d, exist_ok=True)
     path = os.path.join(d, "latest.json")
     with open(path, "w", encoding="utf-8") as f:
@@ -150,7 +150,7 @@ def publish_release(manifest_path):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--generate-only", action="store_true", help="只生成 update/latest.json")
+    parser.add_argument("--generate-only", action="store_true", help="只生成 build/latest.json")
     parser.add_argument("--publish", action="store_true", help="把清单发布到 release 分支并推送")
     parser.add_argument("--github", action="store_true", help="用 gh 创建 GitHub Release 并上传安装包")
     args = parser.parse_args()

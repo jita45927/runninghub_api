@@ -120,7 +120,7 @@ if not exist "installer\RunningHub-AI-Toolbox-Setup-%APP_VER%.exe" (
   exit /b 1
 )
 
-echo [6/6] 生成更新清单 update\latest.json ...
+echo [6/6] 生成更新清单 build\latest.json ...
 python 发布更新.py --generate-only
 if errorlevel 1 (
   echo [警告] 更新清单生成失败，可稍后单独运行 python 发布更新.py --generate-only
@@ -128,6 +128,6 @@ if errorlevel 1 (
 
 echo.
 echo 完成：installer\RunningHub-AI-Toolbox-Setup-%APP_VER%.exe
-echo 更新清单：update\latest.json（上传到 Gitee/GitHub 后自动更新才会生效）
+echo 更新清单：build\latest.json（发布到 release 分支后自动更新才会生效）
 pause
 endlocal
