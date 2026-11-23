@@ -2,6 +2,7 @@
 # 源码直接运行：python launcher.py（等价于 python server.py）
 import json
 import os
+import re
 import sys
 import time
 import threading
@@ -66,6 +67,44 @@ def start_log():
     log("启动：frozen=%s" % getattr(sys, "frozen", False))
     log("exe=%s" % sys.executable)
     log("Python %s" % sys.version.replace("\n", " "))
+
+
+def read_app_version():
+    """欢迎画面版本号：优先读打包时生成的 version.txt，源码运行回退解析 server.py。"""
+    try:
+        with open(os.path.join(BASE, "version.txt"), encoding="utf-8") as f:
+            version = f.read().strip()
+        if version:
+            return version
+    except OSError:
+        pass
+    try:
+        with open(os.path.join(BASE, "server.py"), encoding="utf-8") as f:
+            m = re.search(r'APP_VERSION\s*=\s*"([0-9.]+)"', f.read())
+        return m.group(1) if m else ""
+    except OSError:
+        return ""
+
+
+def create_splash():
+    """创建启动欢迎画面；任何异常都退回无欢迎画面启动，绝不影响主流程。"""
+    try:
+        import splash
+        image = os.path.join(BASE, "ICO", "welcome.png")
+        return splash.Splash(read_app_version(), image if os.path.isfile(image) else None)
+    except Exception:
+        log("欢迎画面创建失败：" + traceback.format_exc())
+        return None
+
+
+def splash_call(ui, name, *args):
+    """调用欢迎画面方法；画面不存在或异常时静默跳过。"""
+    if ui is None:
+        return
+    try:
+        getattr(ui, name)(*args)
+    except Exception:
+        log("欢迎画面调用失败 %s：%s" % (name, traceback.format_exc()))
 
 
 def _same_path(a, b):
@@ -468,6 +507,7 @@ def request_show_window(port, token):
 
 def main():
     start_log()
+    ui = create_splash()  # 最先弹出欢迎画面，后面每一步推进进度
 
     sole = acquire_instance_lock()
     port, token = find_running()
@@ -479,32 +519,43 @@ def main():
             time.sleep(0.25)
             port, token = find_running()
         log("检测到已有实例（端口 %s），本次启动不创建新服务" % (port or "未就绪"))
+        splash_call(ui, "close_now")
         if not port:
             show_error("程序已在后台运行，但本地服务尚未就绪。\n请稍候通过系统托盘图标打开主界面。")
             return
     if port:
         log("已有实例在运行（端口 %d），唤回窗口中" % port)
+        splash_call(ui, "close_now")
         if not request_show_window(port, token):
             # 兼容未提供 /show-window 的旧版本实例：直接打开它的界面
             show_or_open_app_window("http://127.0.0.1:%d/" % port)
         return
 
     ensure_dirs()
+    splash_call(ui, "set_progress", 0.25)
     write_appinfo()
+    splash_call(ui, "set_progress", 0.34)
     migrate_legacy_tools()
+    splash_call(ui, "set_progress", 0.46)
+
+    errors = {}
 
     try:
         start_tray()
+        splash_call(ui, "set_progress", 0.58)
         import server  # 延迟导入：导入时会把工作目录切到程序根目录
         # 第二个启动的进程会请求该接口，由本进程负责打开或置前主窗口
         server.SHOW_WINDOW_HOOK = lambda: show_or_open_app_window(APP_URL)
         server.UPDATE_INSTALL_HOOK = perform_update
         log("server 模块已加载")
+        splash_call(ui, "set_progress", 0.72)
 
         def on_ready(port):
             global APP_URL
             APP_URL = "http://127.0.0.1:%d/" % port
             log("服务已监听 " + APP_URL)
+            splash_call(ui, "set_progress", 0.92)
+            splash_call(ui, "finish")  # 进度走到 100% 后停留 3 秒再消失
             if has_console():
                 print("=" * 50)
                 print("  RunningHub AI 设计师工具箱")
@@ -517,11 +568,33 @@ def main():
 
             threading.Thread(target=open_window, daemon=True).start()
 
-        try:
-            server.serve(8900, on_ready)
-            log("服务已停止")
-        except OSError as e:
-            show_error("本地服务启动失败：" + str(e) + "\n\n可能原因：端口 8900-8909 被其它程序占用。\n详见安装目录下的 启动日志.log")
+        def serve_worker():
+            try:
+                server.serve(8900, on_ready)
+                log("服务已停止")
+            except OSError as e:
+                errors["error"] = e
+            except BaseException:
+                errors["trace"] = traceback.format_exc()
+            finally:
+                splash_call(ui, "abort")  # 服务结束时欢迎画面必须消失
+
+        if ui is None:
+            serve_worker()  # 欢迎画面不可用时退回原来的阻塞启动方式
+        else:
+            worker = threading.Thread(target=serve_worker, daemon=True, name="http-server")
+            worker.start()
+            ui.run()  # 主线程只负责欢迎画面，关闭后返回
+            if "error" not in errors and "trace" not in errors:
+                while worker.is_alive():
+                    time.sleep(0.5)
+
+        if "error" in errors:
+            show_error("本地服务启动失败：" + str(errors["error"])
+                       + "\n\n可能原因：端口 8900-8909 被其它程序占用。\n详见安装目录下的 启动日志.log")
+            return
+        if "trace" in errors:
+            show_error("程序启动失败：\n\n" + errors["trace"])
             return
     finally:
         close_app_windows()

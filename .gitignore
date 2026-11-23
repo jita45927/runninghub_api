@@ -16,4 +16,6 @@ build/
 dist/
 *.spec
 installer/*.exe
+# 打包时生成的版本文件（欢迎画面读取，与打包版本同步）
+version.txt
 __pycache__/

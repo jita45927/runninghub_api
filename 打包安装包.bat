@@ -35,6 +35,8 @@ if not defined APP_VER (
   exit /b 1
 )
 echo    当前版本：%APP_VER%
+rem 欢迎画面读取的版本文件，随安装包一起打进 exe，保证与打包版本一致
+> "version.txt" echo %APP_VER%
 
 python -m pip install --disable-pip-version-check -r requirements-build.txt
 if errorlevel 1 (
@@ -52,7 +54,7 @@ if errorlevel 1 (
 echo [3/6] 打包 exe ...
 if not exist build mkdir build
 set "BUILD_LOG=build\pyinstaller.log"
-python -m PyInstaller --noconfirm --clean --onedir --contents-directory . --noconsole --name RunningHubToolbox --icon "ICO\RAPI.ico" --hidden-import "pystray._win32" --add-data "index.html;." --add-data "ICO\RAPI.ico;." --add-data "ICO;ICO" --add-data "css;css" --add-data "js;js" --add-data "sys_tools;sys_tools" launcher.py >"%BUILD_LOG%" 2>&1
+python -m PyInstaller --noconfirm --clean --onedir --contents-directory . --noconsole --name RunningHubToolbox --icon "ICO\RAPI.ico" --hidden-import "pystray._win32" --add-data "index.html;." --add-data "version.txt;." --add-data "ICO\RAPI.ico;." --add-data "ICO;ICO" --add-data "css;css" --add-data "js;js" --add-data "sys_tools;sys_tools" launcher.py >"%BUILD_LOG%" 2>&1
 set "PYINSTALLER_EXIT=%ERRORLEVEL%"
 type "%BUILD_LOG%"
 if not "%PYINSTALLER_EXIT%"=="0" (
