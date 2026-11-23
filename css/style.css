@@ -22,6 +22,18 @@ body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: va
 }
 .promo-bar .repo-copy-btn:hover { color: var(--green); border-color: var(--green); }
 .promo-bar .repo-copy-btn.copied { color: var(--green); border-color: var(--green); }
+.promo-bar .promo-qr {
+  display: inline-flex; align-items: center; gap: 6px; padding: 1px 8px 1px 2px;
+  background: transparent; border: 1px solid var(--border); border-radius: 4px;
+  color: var(--muted); font-size: 11px; font-family: inherit; cursor: pointer; white-space: nowrap;
+  transition: all .15s;
+}
+.promo-bar .promo-qr img { width: 18px; height: 18px; border-radius: 3px; display: block; object-fit: cover; }
+.promo-bar .promo-qr:hover { color: var(--text); border-color: var(--accent); }
+.wx-qr-img {
+  width: 260px; height: 260px; object-fit: contain; display: block; margin: 0 auto;
+  background: #fff; padding: 8px; border-radius: 10px;
+}
 
 /* ===== 顶栏 ===== */
 .topbar {

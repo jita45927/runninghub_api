@@ -308,6 +308,10 @@ export function initModals(renderAll, panel) {
   document.getElementById("toolHelpBtn").onclick = () => {
     document.getElementById("toolHelpModal").classList.add("show");
   };
+  // 微信公众号二维码
+  document.getElementById("promoQrBtn").onclick = () => {
+    document.getElementById("wxQrModal").classList.add("show");
+  };
   // 程序说明
   document.getElementById("aboutBtn").onclick = () => {
     document.getElementById("aboutModal").classList.add("show");

@@ -24,7 +24,7 @@ def _data_dir():
 
 
 os.chdir(_app_dir())
-APP_VERSION = "1.0.5"  # 版本号唯一来源：打包脚本、更新清单与界面均读取此处
+APP_VERSION = "1.0.6"  # 版本号唯一来源：打包脚本、更新清单与界面均读取此处
 BASE_DIR = _app_dir()
 DATA_DIR = _data_dir()
 os.makedirs(DATA_DIR, exist_ok=True)

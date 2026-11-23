@@ -1,16 +1,16 @@
 {
   "app": "runninghub",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "date": "2026-11-23",
-  "notes": "- 更新推广栏「TRAE注册地址」分享链接。\n- 版本号升至 1.0.5。",
-  "page": "https://github.com/jita45927/runninghub_api/releases/tag/v1.0.5",
+  "notes": "- 顶栏新增「程序说明」按钮，集中介绍工具定位、开发方式与使用提示。\n- 推广栏新增微信公众号二维码，点击可查看大图扫码关注。\n- 版本号升至 1.0.6。",
+  "page": "https://github.com/jita45927/runninghub_api/releases/tag/v1.0.6",
   "installer": {
-    "name": "RunningHub-AI-Toolbox-Setup-1.0.5.exe",
-    "size": 19793084,
-    "sha256": "a6357b7bd67ba03aceb4f5187bdd39880e7ce3011859f108a72f31223240ad1f",
+    "name": "RunningHub-AI-Toolbox-Setup-1.0.6.exe",
+    "size": 19801753,
+    "sha256": "24062bab7a48d3bcdbbd36d82c6526c510040c8bac9bbb0cbd981171c68408ca",
     "urls": [
-      "https://gitee.com/matt8469/runninghub_api/releases/download/v1.0.5/RunningHub-AI-Toolbox-Setup-1.0.5.exe",
-      "https://github.com/jita45927/runninghub_api/releases/download/v1.0.5/RunningHub-AI-Toolbox-Setup-1.0.5.exe"
+      "https://gitee.com/matt8469/runninghub_api/releases/download/v1.0.6/RunningHub-AI-Toolbox-Setup-1.0.6.exe",
+      "https://github.com/jita45927/runninghub_api/releases/download/v1.0.6/RunningHub-AI-Toolbox-Setup-1.0.6.exe"
     ]
   }
 }
