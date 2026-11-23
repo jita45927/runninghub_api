@@ -55,7 +55,7 @@
 
 <!-- 顶栏 -->
 <div class="topbar">
-  <div class="logo"><img class="logo-badge" src="ICO/RAPI.ico" alt="RunningHub">RunningHub AI设计师工具箱<span class="logo-version" id="appVersion" title="当前版本"></span></div>
+  <div class="logo"><img class="logo-badge" src="ICO/RAPI.ico" alt="RunningHub">RunningHub AI设计师工具箱<span class="logo-version" id="appVersion" title="当前版本"></span><button class="about-btn" id="aboutBtn" title="查看程序说明">📄 程序说明</button></div>
   <div style="display:flex;gap:10px">
     <div class="top-search">
       <span class="top-search-icon">🔍</span>
@@ -351,6 +351,45 @@
       <div></div>
       <div class="right">
         <button class="btn ghost" data-close="toolHelpModal">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 程序说明弹窗 -->
+<div class="modal-mask" id="aboutModal">
+  <div class="modal" style="width:760px">
+    <h3>📄 程序说明</h3>
+    <div class="modal-sub">关于 RunningHub-API 设计师工具箱，内容较多可上下滚动</div>
+    <div class="help-doc">
+      <p>亲爱的小伙伴们，欢迎使用马特开发的 Runninghub-API 设计师工具箱。本工具通过调用 Runninghub 平台 API，拉起工作流或应用来生成图像。各类功能以独立面板形式集成在程序内，大幅降低 ComfyUI 工作流的使用门槛。</p>
+
+      <h4>为什么做这个工具</h4>
+      <p>Runninghub 平台本身支持把工作流封装为应用，但受平台规则、版本迭代限制，并非所有接口都可以开放到前端，大量工作流无法直接封装成应用；而直接使用原生工作流，操作复杂，容易劝退新手，同时打开工作流页面加载耗时久。如果项目需要调用多个工作流，还要在多个页面来回切换、反复刷新网页，严重影响效率。</p>
+
+      <h4>本工具如何解决</h4>
+      <p>本工具正是为了解决这些痛点：依托 API 调用能力，<b>放开绝大多数接口</b>；界面封装全部在本地程序实现，<b>不依赖 Runninghub 自带的应用封装能力</b>。如此一来，很多平台上无法封装为应用的工作流，都能在本工具中正常封装使用。调用时无需频繁切换、刷新网页，不用等待网页响应即可发起算力请求。</p>
+
+      <h4>当前版本与工具</h4>
+      <p>当前版本从 v1.0.6 开始对外发布，内置 <b>21 套系统工具</b>，均对接马特发布在 Runninghub 上的工作流与应用。你也可以自行配置平台上任意已公开的工作流或应用，只是自定义配置有一定上手门槛。</p>
+
+      <h4>关于开发</h4>
+      <p>马特本身并不精通代码，本程序借助 AI 编程工具开发，大部分工具配置同样由 AI 辅助完成。开发使用的是字节旗下 Trae IDE，感兴趣的小伙伴可以点击工具顶部链接注册体验。项目源码已开源至 GitHub，链接同样放在顶部，大家可以拉取代码，自行新增工具配置。</p>
+
+      <h4>自动更新</h4>
+      <p>自本版本起，程序新增自动更新功能：后续马特更新工具配置、发布新版安装包时，程序可检测更新、自动下载升级。</p>
+      <p><b>⚠️ 注意：</b>升级会替换内置的系统工具配置（适配平台工作流改动），<b>你自己添加的自定义工具不会被改动</b>，用户的下载路径中个人数据也不会受到影响。后续我会持续在升级包内新增实用系统工具，也会单独对外共享工具配置包。如果你不想手动配置，手上有好用的工作流希望加入内置工具，欢迎留言，我会尽量安排。</p>
+
+      <h4>使用前准备</h4>
+      <p>本工具依赖 Runninghub API 服务，使用前需要注册平台并申请 API Key，点击【使用指南】查看教程。API 分为「消费级 - 会员」和「企业级 - 共享」两类：前者消耗会员积分，后者扣除钱包余额，二者定价基本一致。<b>推荐充值钱包，随用随扣</b>，不受会员有效期约束。程序安装包与源码<b>不会存储你的 API Key</b>，安装包和源码可以放心分享，欢迎转发。</p>
+
+      <h4>反馈与联系</h4>
+      <p>马特并非专业程序员，仅使用 AI 编程半年，只掌握基础开发知识，程序难免存在 Bug。欢迎大家通过渠道反馈问题、提出建议，我会尽力优化。我的联系链接也放在工具顶部。</p>
+    </div>
+    <div class="modal-actions">
+      <div></div>
+      <div class="right">
+        <button class="btn ghost" data-close="aboutModal">我知道了</button>
       </div>
     </div>
   </div>
