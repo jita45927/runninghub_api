@@ -2,12 +2,12 @@
   "app": "runninghub",
   "version": "1.0.6",
   "date": "2026-11-23",
-  "notes": "- 顶栏新增「程序说明」按钮，集中介绍工具定位、开发方式与使用提示。\n- 推广栏新增微信公众号二维码，点击可查看大图扫码关注。\n- 版本号升至 1.0.6。",
+  "notes": "- 新增启动欢迎画面：无边框置顶、居中显示，带版本号与加载进度条，加载完成后停留 3 秒再消失。\n- 顶栏新增「程序说明」按钮，集中介绍工具定位、开发方式与使用提示。\n- 推广栏新增微信公众号二维码，点击可查看大图扫码关注。\n- 版本号升至 1.0.6。",
   "page": "https://github.com/jita45927/runninghub_api/releases/tag/v1.0.6",
   "installer": {
     "name": "RunningHub-AI-Toolbox-Setup-1.0.6.exe",
-    "size": 19801753,
-    "sha256": "24062bab7a48d3bcdbbd36d82c6526c510040c8bac9bbb0cbd981171c68408ca",
+    "size": 22347695,
+    "sha256": "eedf4bd9093fd1537827cf71a80acda238189a36e44bcf6e5dd5742d02e4fb96",
     "urls": [
       "https://gitee.com/matt8469/runninghub_api/releases/download/v1.0.6/RunningHub-AI-Toolbox-Setup-1.0.6.exe",
       "https://github.com/jita45927/runninghub_api/releases/download/v1.0.6/RunningHub-AI-Toolbox-Setup-1.0.6.exe"
