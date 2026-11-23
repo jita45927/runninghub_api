@@ -15,6 +15,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OWNER_REPO = "jita45927/runninghub_api"
+GITEE_OWNER_REPO = "matt8469/runninghub_api"
 SETUP_NAME = "RunningHub-AI-Toolbox-Setup-{version}.exe"
 
 
@@ -68,7 +69,7 @@ def build_manifest(version):
             "size": os.path.getsize(exe),
             "sha256": sha256_of(exe),
             "urls": [
-                "https://gitee.com/%s/releases/download/%s/%s" % (OWNER_REPO, tag, name),
+                "https://gitee.com/%s/releases/download/%s/%s" % (GITEE_OWNER_REPO, tag, name),
                 "https://github.com/%s/releases/download/%s/%s" % (OWNER_REPO, tag, name),
             ],
         },
@@ -127,7 +128,7 @@ def main():
     print("1) 在 Gitee 创建 tag v%s 的 Release，上传 installer\\%s" % (version, manifest["installer"]["name"]))
     print("2) 把 update/latest.json 提交到仓库 master 分支（Gitee 与 GitHub 都要推送）")
     print("3) 确认以下地址可匿名访问：")
-    for url in ("https://gitee.com/%s/raw/master/update/latest.json" % OWNER_REPO,
+    for url in ("https://gitee.com/%s/raw/master/update/latest.json" % GITEE_OWNER_REPO,
                 "https://raw.githubusercontent.com/%s/master/update/latest.json" % OWNER_REPO):
         print("   " + url)
 

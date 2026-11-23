@@ -44,7 +44,7 @@ COVER_EXTS = (".png", ".jpg", ".jpeg", ".webp")
 
 # ===== 自动更新 =====
 UPDATE_MANIFEST_URLS = [
-    "https://gitee.com/jita45927/runninghub_api/raw/master/update/latest.json",
+    "https://gitee.com/matt8469/runninghub_api/raw/master/update/latest.json",
     "https://raw.githubusercontent.com/jita45927/runninghub_api/master/update/latest.json",
 ]
 UPDATE_ALLOWED_HOSTS = {"gitee.com", "giteeusercontent.com", "raw.githubusercontent.com",
