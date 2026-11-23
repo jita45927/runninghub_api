@@ -18,4 +18,6 @@ dist/
 installer/*.exe
 # 打包时生成的版本文件（欢迎画面读取，与打包版本同步）
 version.txt
+# 更新清单只发布到 release 分支，master 不再跟踪（避免推送 master 触发升级提示）
+update/latest.json
 __pycache__/

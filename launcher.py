@@ -40,6 +40,9 @@ _TRAY = None
 _MUTEX = None
 _WINDOW_LOCK = threading.Lock()
 _EXITING = False
+_BROWSER_PID = None          # 本程序拉起的浏览器进程，用于窗口关闭后清理残留
+_MONITOR_STOP = threading.Event()
+_MONITOR_STARTED = False
 
 # 控制台编码不可用时避免打印中文直接抛异常
 for _s in (sys.stdout, sys.stderr):
@@ -59,12 +62,14 @@ def log(msg):
 
 
 def start_log():
+    # 追加写：第二个实例启动时不能覆盖第一个实例的关键日志；仅在过大时清空
     try:
-        with open(LOG, "w", encoding="utf-8"):
-            pass
-    except Exception:
+        if os.path.getsize(LOG) > 1024 * 1024:
+            with open(LOG, "w", encoding="utf-8"):
+                pass
+    except OSError:
         pass
-    log("启动：frozen=%s" % getattr(sys, "frozen", False))
+    log("启动：pid=%s frozen=%s" % (os.getpid(), getattr(sys, "frozen", False)))
     log("exe=%s" % sys.executable)
     log("Python %s" % sys.version.replace("\n", " "))
 
@@ -227,6 +232,7 @@ def migrate_legacy_tools():
 def perform_update(installer_path):
     """自动更新：关闭界面和托盘，静默安装新版本后退出，由安装器重新拉起程序。"""
     log("开始自动更新：" + installer_path)
+    _MONITOR_STOP.set()  # 更新时关闭窗口属正常流程，不再做残留清理判断
     try:
         close_app_windows()
         stop_tray()
@@ -234,6 +240,7 @@ def perform_update(installer_path):
         subprocess.Popen([installer_path, "/SILENT", "/NORESTART", "/SP-"], close_fds=True)
     except Exception:
         log("启动更新程序失败：" + traceback.format_exc())
+        _MONITOR_STOP.clear()  # 更新未发生，恢复窗口监视
         return
     os._exit(0)
 
@@ -290,7 +297,7 @@ def find_browser():
 
 
 def _app_windows():
-    """按页面标题查找本程序的 Chromium 应用窗口。"""
+    """按页面标题查找本程序可见的 Chromium 应用窗口。"""
     if os.name != "nt":
         return []
     user32 = ctypes.windll.user32
@@ -298,12 +305,16 @@ def _app_windows():
 
     @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
     def callback(hwnd, _):
+        # 关闭动画/后台残留的隐藏窗口不能算作可用窗口，否则会误判为“窗口还在”
+        if not user32.IsWindowVisible(hwnd):
+            return True
         n = user32.GetWindowTextLengthW(hwnd)
-        if n > 0:
-            title = ctypes.create_unicode_buffer(n + 1)
-            user32.GetWindowTextW(hwnd, title, n + 1)
-            if APP_TITLE in title.value:
-                found.append(hwnd)
+        if n <= 0:
+            return True
+        title = ctypes.create_unicode_buffer(n + 1)
+        user32.GetWindowTextW(hwnd, title, n + 1)
+        if APP_TITLE in title.value:
+            found.append(hwnd)
         return True
 
     user32.EnumWindows(callback, 0)
@@ -311,42 +322,40 @@ def _app_windows():
 
 
 def _activate_window(hwnd):
-    """还原并置前窗口；后台进程直接 SetForegroundWindow 可能只会闪任务栏。"""
+    """还原并置前窗口：已在前台就不再动它，避免重复激活造成闪屏。"""
     user32 = ctypes.windll.user32
-    user32.ShowWindow(hwnd, 9 if user32.IsIconic(hwnd) else 5)  # SW_RESTORE / SW_SHOW
-    fg = user32.GetForegroundWindow()
-    fg_thread = user32.GetWindowThreadProcessId(fg, None) if fg else 0
-    target_thread = user32.GetWindowThreadProcessId(hwnd, None)
-    attached = bool(fg_thread and target_thread and fg_thread != target_thread)
-    if attached:
-        user32.AttachThreadInput(fg_thread, target_thread, True)
-    user32.keybd_event(0x12, 0, 0, 0)
-    user32.keybd_event(0x12, 0, 2, 0)
-    user32.SetForegroundWindow(hwnd)
-    user32.BringWindowToTop(hwnd)
-    if attached:
-        user32.AttachThreadInput(fg_thread, target_thread, False)
+    if user32.IsIconic(hwnd):
+        user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+    if user32.GetForegroundWindow() == hwnd:
+        return
+    # SwitchToThisWindow 由系统任务栏使用，比 Alt 键模拟更平滑，不会触发菜单栏重绘
+    user32.SwitchToThisWindow(hwnd, True)
+    if user32.GetForegroundWindow() != hwnd:
+        user32.SetForegroundWindow(hwnd)
 
 
-def _activate_app_window_later():
-    def worker():
-        for _ in range(30):
-            windows = _app_windows()
-            if windows:
-                _activate_window(windows[0])
-                return
-            time.sleep(0.2)
-    threading.Thread(target=worker, daemon=True).start()
+def _wait_for_app_window(timeout):
+    """等待应用窗口出现并置前；返回是否成功，避免“已拉起但没出现”被当成成功。"""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        windows = _app_windows()
+        if windows:
+            _activate_window(windows[0])
+            log("应用窗口已就绪：hwnd=%s" % windows[0])
+            return True
+        time.sleep(0.2)
+    log("等待应用窗口超时（%.0f 秒）" % timeout)
+    return False
 
 
-def open_app_window(url):
-    """用应用窗口模式打开：没有地址栏、标签页，看起来就是一个桌面程序。"""
+def open_app_window(url, wait=8.0):
+    """用应用窗口模式打开：没有地址栏、标签页，看起来就是一个桌面程序。返回是否真正出现窗口。"""
+    global _BROWSER_PID
     exe = find_browser()
     if not exe:
         log("未找到 Edge/Chrome，退回默认浏览器")
         webbrowser.open(url)
-        _activate_app_window_later()
-        return
+        return _wait_for_app_window(wait)
     profile = os.path.join(os.environ.get("LOCALAPPDATA") or BASE, "RunningHubToolbox", "browser")
     try:
         os.makedirs(profile, exist_ok=True)
@@ -362,22 +371,88 @@ def open_app_window(url):
         "--disable-background-mode",
     ]
     try:
-        subprocess.Popen([exe] + args)
-        log("应用窗口已启动：" + exe)
+        _BROWSER_PID = subprocess.Popen([exe] + args).pid
+        log("应用窗口已启动：%s（pid=%s）" % (exe, _BROWSER_PID))
     except Exception:
         log("应用窗口启动失败：" + traceback.format_exc())
         webbrowser.open(url)
-    _activate_app_window_later()
+    return _wait_for_app_window(wait)
+
+
+def _kill_stale_browser():
+    """清理本程序拉起的残留浏览器进程，避免同一配置目录被后台进程占用导致新窗口打不开。"""
+    global _BROWSER_PID
+    pid = _BROWSER_PID
+    _BROWSER_PID = None
+    if not pid:
+        return
+    try:
+        kernel32 = ctypes.windll.kernel32
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return
+        kernel32.CloseHandle(handle)
+        subprocess.run(
+            ["taskkill", "/PID", str(pid), "/T", "/F"],
+            creationflags=0x08000000,  # CREATE_NO_WINDOW
+            capture_output=True, timeout=10,
+        )
+        log("已清理残留浏览器进程 pid=%s" % pid)
+    except Exception:
+        log("清理残留浏览器进程失败：" + traceback.format_exc())
 
 
 def show_or_open_app_window(url=None):
-    """已有窗口则唤回；窗口已通过 X 关闭时，重新打开应用窗口。"""
+    """已有可见窗口则唤回；窗口已通过 X 关闭时，清理残留后重新打开。返回是否成功。"""
+    url = url or APP_URL
     with _WINDOW_LOCK:
         windows = _app_windows()
         if windows:
+            log("唤回已有窗口：hwnd=%s" % windows[0])
             _activate_window(windows[0])
-        else:
-            open_app_window(url or APP_URL)
+            return True
+        log("未找到主窗口，准备重新打开：" + url)
+        _kill_stale_browser()
+        if open_app_window(url):
+            return True
+        log("首次打开未出现窗口，清理残留后重试")
+        _kill_stale_browser()
+        if open_app_window(url):
+            return True
+        log("重新打开主窗口失败")
+        return False
+
+
+def _window_monitor():
+    """监视主窗口：用户点 X 关闭后清理残留浏览器进程，保证再次单击托盘/启动 exe 能重新打开。"""
+    appeared = False
+    while not _MONITOR_STOP.is_set():
+        try:
+            windows = _app_windows()
+            if windows:
+                appeared = True
+            elif appeared:
+                appeared = False
+                log("主窗口已关闭，程序继续驻留托盘")
+                # 加锁复查：避免把“刚被重新打开”的新窗口进程误清理
+                with _WINDOW_LOCK:
+                    if not _app_windows():
+                        _kill_stale_browser()
+        except Exception:
+            log("窗口监视异常：" + traceback.format_exc())
+            return
+        _MONITOR_STOP.wait(0.6)
+
+
+def start_window_monitor():
+    global _MONITOR_STARTED
+    if _MONITOR_STARTED:
+        return
+    _MONITOR_STARTED = True
+    threading.Thread(target=_window_monitor, daemon=True, name="window-monitor").start()
 
 
 def close_app_windows():
@@ -422,8 +497,20 @@ def _request_shutdown():
         show_error("退出失败，请稍后重试。\n\n" + str(e))
 
 
+def _tray_restore(*_):
+    """托盘恢复窗口：放到后台线程执行，避免等待窗口时卡住托盘消息循环。"""
+    def worker():
+        try:
+            if not show_or_open_app_window():
+                log("托盘恢复窗口失败")
+        except Exception:
+            log("托盘恢复窗口异常：" + traceback.format_exc())
+
+    threading.Thread(target=worker, daemon=True).start()
+
+
 def start_tray():
-    """启动即显示托盘；左键打开主界面，右键提供打开和彻底退出。"""
+    """启动即显示托盘；单击图标恢复窗口，右键提供恢复/退出。"""
     global _TRAY
     icon_path = os.path.join(BASE, "RAPI.ico")
     if not os.path.isfile(icon_path):
@@ -431,7 +518,7 @@ def start_tray():
     with Image.open(icon_path) as source:
         image = source.copy()
     menu = pystray.Menu(
-        pystray.MenuItem("打开主界面", lambda *_: show_or_open_app_window(), default=True),
+        pystray.MenuItem("恢复窗口", _tray_restore, default=True),
         pystray.MenuItem("退出程序", request_exit),
     )
     _TRAY = pystray.Icon("RunningHubToolbox", image, APP_TITLE, menu)
@@ -492,14 +579,23 @@ def find_running():
 
 
 def request_show_window(port, token):
-    """让已运行实例打开或置前主窗口，避免本次启动再起一个后台服务。"""
+    """让已运行实例打开或置前主窗口，返回它是否确认窗口已出现。"""
     try:
         req = urllib.request.Request(
             "http://127.0.0.1:%d/show-window" % port, data=b"", method="POST",
             headers={TOKEN_HEADER: token},
         )
-        with urllib.request.urlopen(req, timeout=3) as r:
-            return r.status == 200
+        with urllib.request.urlopen(req, timeout=20) as r:
+            body = r.read().decode("utf-8", "replace")
+        try:
+            data = json.loads(body) if body else {}
+        except ValueError:
+            data = {}
+        if "ok" not in data:
+            return None  # 旧版本实例：无同步结果，由调用方等待窗口出现再判断
+        if not data.get("ok"):
+            log("已有实例唤回窗口失败：%s" % (data.get("error") or "未知原因"))
+        return bool(data.get("ok"))
     except Exception:
         log("唤回已有窗口失败：" + traceback.format_exc())
         return False
@@ -526,9 +622,14 @@ def main():
     if port:
         log("已有实例在运行（端口 %d），唤回窗口中" % port)
         splash_call(ui, "close_now")
-        if not request_show_window(port, token):
-            # 兼容未提供 /show-window 的旧版本实例：直接打开它的界面
-            show_or_open_app_window("http://127.0.0.1:%d/" % port)
+        url = "http://127.0.0.1:%d/" % port
+        ok = request_show_window(port, token)
+        log("唤回窗口请求结果：%s" % ok)
+        # 无论请求结果如何，都以“屏幕上是否真的出现主窗口”为准做兜底
+        if not _wait_for_app_window(5.0):
+            log("仍未检测到主窗口，由本次启动直接打开")
+            if not show_or_open_app_window(url):
+                log("兜底打开主窗口失败")
         return
 
     ensure_dirs()
@@ -544,8 +645,17 @@ def main():
         start_tray()
         splash_call(ui, "set_progress", 0.58)
         import server  # 延迟导入：导入时会把工作目录切到程序根目录
+
+        def show_window_hook():
+            """第二个启动的进程请求唤回界面，返回窗口是否真的出现。"""
+            try:
+                return bool(show_or_open_app_window(APP_URL))
+            except Exception:
+                log("唤回窗口钩子异常：" + traceback.format_exc())
+                return False
+
         # 第二个启动的进程会请求该接口，由本进程负责打开或置前主窗口
-        server.SHOW_WINDOW_HOOK = lambda: show_or_open_app_window(APP_URL)
+        server.SHOW_WINDOW_HOOK = show_window_hook
         server.UPDATE_INSTALL_HOOK = perform_update
         log("server 模块已加载")
         splash_call(ui, "set_progress", 0.72)
@@ -567,6 +677,7 @@ def main():
                 show_or_open_app_window(APP_URL)
 
             threading.Thread(target=open_window, daemon=True).start()
+            start_window_monitor()
 
         def serve_worker():
             try:
@@ -577,6 +688,7 @@ def main():
             except BaseException:
                 errors["trace"] = traceback.format_exc()
             finally:
+                _MONITOR_STOP.set()  # 服务停止后不再监视窗口
                 splash_call(ui, "abort")  # 服务结束时欢迎画面必须消失
 
         if ui is None:
@@ -597,6 +709,7 @@ def main():
             show_error("程序启动失败：\n\n" + errors["trace"])
             return
     finally:
+        _MONITOR_STOP.set()
         close_app_windows()
         stop_tray()
 

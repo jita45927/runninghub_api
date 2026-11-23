@@ -43,10 +43,11 @@ TOOL_EXTS = (".rhtool.json",)
 COVER_EXTS = (".png", ".jpg", ".jpeg", ".webp")
 
 # ===== 自动更新 =====
+# 更新清单放在独立的 release 分支：推送 master 不会触发客户端升级提示
 UPDATE_MANIFEST_URLS = [
-    "https://gitee.com/matt8469/runninghub_api/raw/master/update/latest.json",
-    "https://cdn.jsdelivr.net/gh/jita45927/runninghub_api@master/update/latest.json",
-    "https://raw.githubusercontent.com/jita45927/runninghub_api/master/update/latest.json",
+    "https://gitee.com/matt8469/runninghub_api/raw/release/update/latest.json",
+    "https://cdn.jsdelivr.net/gh/jita45927/runninghub_api@release/update/latest.json",
+    "https://raw.githubusercontent.com/jita45927/runninghub_api/release/update/latest.json",
 ]
 UPDATE_ALLOWED_HOSTS = {"gitee.com", "giteeusercontent.com", "raw.githubusercontent.com",
                         "github.com", "objects.githubusercontent.com",
@@ -634,11 +635,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         threading.Thread(target=self.server.shutdown, daemon=True).start()
 
     def _handle_show_window(self):
-        """第二个启动的进程请求唤回界面：打开或置前已有应用窗口。"""
-        self._send_json(200, {"ok": True})
+        """第二个启动的进程请求唤回界面：同步执行并返回窗口是否真的出现。"""
         hook = SHOW_WINDOW_HOOK
-        if hook:
-            threading.Thread(target=hook, daemon=True).start()
+        if not hook:
+            self._send_json(503, {"ok": False, "error": "窗口唤回尚未就绪"})
+            return
+        try:
+            ok = bool(hook())
+            self._send_json(200, {"ok": ok})
+        except Exception as e:
+            self._send_json(200, {"ok": False, "error": str(e) or e.__class__.__name__})
 
     def _read_json_body(self):
         try:

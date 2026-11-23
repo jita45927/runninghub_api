@@ -1,9 +1,10 @@
-"""生成自动更新清单 update/latest.json，并可选择用 gh 创建 GitHub Release。
+"""生成自动更新清单，并可发布到独立 release 分支、创建 GitHub Release。
 
 用法：
   python 发布更新.py --generate-only   只生成 update/latest.json（打包脚本会调用）
-  python 发布更新.py                    生成清单并打印上传步骤
-  python 发布更新.py --github           生成清单并用 gh 创建 Release、上传安装包
+  python 发布更新.py                    生成清单并打印发版步骤
+  python 发布更新.py --publish          把清单提交到 release 分支并推送到 GitHub/Gitee
+  python 发布更新.py --publish --github 同时用 gh 创建 GitHub Release、上传安装包
 """
 import argparse
 import hashlib
@@ -17,6 +18,8 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 OWNER_REPO = "jita45927/runninghub_api"
 GITEE_OWNER_REPO = "matt8469/runninghub_api"
 SETUP_NAME = "RunningHub-AI-Toolbox-Setup-{version}.exe"
+RELEASE_BRANCH = "release"  # 只存放 update/latest.json 的独立分支
+REMOTES = ("origin", "gitee")
 
 
 def read_version():
@@ -106,9 +109,49 @@ def github_release(manifest):
     return True
 
 
+def _run_git(*args, input_text=None):
+    return subprocess.run(
+        ["git"] + list(args), cwd=ROOT, check=True, capture_output=True,
+        text=True, input=input_text,
+    ).stdout.strip()
+
+
+def publish_release(manifest_path):
+    """把清单写入独立 release 分支并推送：分支里只保留 update/latest.json。"""
+    rel = os.path.relpath(manifest_path, ROOT).replace(os.sep, "/")
+    blob = _run_git("hash-object", "-w", rel)
+    # 用 -z（NUL 分隔）避免 Windows 换行符被写进文件名
+    inner = _run_git("mktree", "-z",
+                     input_text="100644 blob %s\tlatest.json\0" % blob).split("\0")[0]
+    tree = _run_git("mktree", "-z",
+                    input_text="040000 tree %s\tupdate\0" % inner).split("\0")[0]
+    args = ["commit-tree", tree, "-m", "发布更新清单 v%s" % read_version()]
+    try:
+        parent = _run_git("rev-parse", "--verify", "refs/heads/" + RELEASE_BRANCH)
+        args[2:2] = ["-p", parent]
+    except subprocess.CalledProcessError:
+        pass  # 首次创建：孤儿提交
+    commit = _run_git(*args)
+    _run_git("update-ref", "refs/heads/" + RELEASE_BRANCH, commit)
+    print("已生成 release 分支提交：%s" % commit[:8])
+    ok = True
+    for remote in REMOTES:
+        try:
+            subprocess.run(
+                ["git", "push", remote, "%s:%s" % (RELEASE_BRANCH, RELEASE_BRANCH)],
+                cwd=ROOT, check=True, capture_output=True, text=True,
+            )
+            print("已推送清单到 %s/%s" % (remote, RELEASE_BRANCH))
+        except (OSError, subprocess.CalledProcessError) as e:
+            ok = False
+            print("推送到 %s 失败：%s" % (remote, e))
+    return ok
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--generate-only", action="store_true", help="只生成 update/latest.json")
+    parser.add_argument("--publish", action="store_true", help="把清单发布到 release 分支并推送")
     parser.add_argument("--github", action="store_true", help="用 gh 创建 GitHub Release 并上传安装包")
     args = parser.parse_args()
 
@@ -121,15 +164,20 @@ def main():
     if args.generate_only:
         return
 
+    if args.publish:
+        publish_release(path)
+
     if args.github:
         github_release(manifest)
 
-    print("\n还需要手动完成：")
-    print("1) 在 Gitee 创建 tag v%s 的 Release，上传 installer\\%s" % (version, manifest["installer"]["name"]))
-    print("2) 把 update/latest.json 提交到仓库 master 分支（Gitee 与 GitHub 都要推送）")
-    print("3) 确认以下地址可匿名访问：")
-    for url in ("https://gitee.com/%s/raw/master/update/latest.json" % GITEE_OWNER_REPO,
-                "https://raw.githubusercontent.com/%s/master/update/latest.json" % OWNER_REPO):
+    print("\n发版还需要：")
+    print("1) 在 Gitee 创建 tag v%s 的 Release，上传 installer\\%s"
+          % (version, manifest["installer"]["name"]))
+    print("2) 发布更新清单：python 发布更新.py --publish")
+    print("   （清单只进入 release 分支，master 不再存放，日常推送 master 不会触发升级）")
+    print("3) 确认以下地址返回本版本清单：")
+    for url in ("https://gitee.com/%s/raw/release/update/latest.json" % GITEE_OWNER_REPO,
+                "https://raw.githubusercontent.com/%s/release/update/latest.json" % OWNER_REPO):
         print("   " + url)
 
 
