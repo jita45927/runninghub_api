@@ -50,7 +50,7 @@ export async function parseRespJson(resp) {
   return json;
 }
 
-// 上传图片，返回 fileName（signal 用于取消时中断上传请求）
+// 上传文件（图片/音频通用），返回 fileName（signal 用于取消时中断上传请求）
 export async function uploadImage(file, signal) {
   const fd = new FormData();
   fd.append("file", file);
@@ -61,7 +61,7 @@ export async function uploadImage(file, signal) {
     signal
   });
   const json = await parseRespJson(resp);
-  if (json.code !== 0) throw new Error("图片上传失败：" + (json.message || json.msg || JSON.stringify(json)));
+  if (json.code !== 0) throw new Error("文件上传失败：" + (json.message || json.msg || JSON.stringify(json)));
   return json.data.fileName;
 }
 

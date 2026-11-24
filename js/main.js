@@ -278,7 +278,7 @@ async function saveCurrentDefaults() {
     let count = 0;
     let skippedImages = 0;
     (t.fields || []).forEach((f, i) => {
-      if (f.type === "image") { skippedImages++; return; }  // File 对象不写入 JSON 配置
+      if (f.type === "image" || f.type === "audio") { skippedImages++; return; }  // File 对象不写入 JSON 配置
       const el = document.getElementById("ff_" + i);
       if (!el) return;
       const value = el.value;
@@ -305,7 +305,7 @@ async function saveCurrentDefaults() {
       return;
     }
     showStatus("已保存 " + count + " 项参数为「" + t.name + "」的默认值"
-      + (skippedImages ? "（图片除外）" : "") + "：tools/" + fn, "success");
+      + (skippedImages ? "（图片/音频除外）" : "") + "：tools/" + fn, "success");
   } catch (err) {
     showStatus("保存默认值失败：" + err.message, "error");
   } finally {

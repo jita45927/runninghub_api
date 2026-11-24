@@ -1,5 +1,6 @@
 // ================= 左侧工具列表（按分类分组，可展开/收起）【公共核心】 =================
 // 本文件由公共核心同步而来：请修改 runninghub_api/js/ui/toollist.js，再运行「同步核心.ps1」。
+// 【不同步到 COMFYUI】系统工具隐藏/复制（toolSourceOf / setToolTombstone / copyToolToUser、系统/我的徽标、重置系统工具）仅适用于 RunningHub，同步时需剔除。
 import { state, saveTools, saveActiveId, saveCats, saveCatOrder, tagsOf } from "../store.js";
 import { removeToolFile, persistTool, toolSourceOf, setToolTombstone, copyToolToUser } from "../tools.js";
 import { showStatus } from "./form.js";
@@ -28,6 +29,8 @@ function statusOf(t) {
   const hasApp = !!(t.webappId || t.workflow);
   const configured = hasApp && (t.fields || []).every(f => f.nodeId);
   if (state.runningToolId === t.id && state.currentRun) return { cls: "running", text: "◐ 生成中…" };
+  const queued = state.runQueue.filter(q => q.toolId === t.id).length;
+  if (queued) return { cls: "queued", text: "⏳ 排队中" + (queued > 1 ? "（" + queued + "）" : "") };
   if (state.lastDoneToolId === t.id) return { cls: "done", text: "✓ 最近完成" };
   return configured ? { cls: "ok", text: "● 已配置" } : { cls: "", text: "○ 待配置" };
 }
@@ -147,6 +150,7 @@ export function refreshToolItemStates() {
     if (!t) return;
     const st = statusOf(t);
     el.classList.toggle("running", st.cls === "running");
+    el.classList.toggle("queued", st.cls === "queued");
     el.classList.toggle("done", st.cls === "done");
     const s = el.querySelector(".tool-status");
     if (s) { s.className = "tool-status" + (st.cls ? " " + st.cls : ""); s.textContent = st.text; }
@@ -251,7 +255,8 @@ function buildToolItem(t, renderAll, groupTag) {
   const trashed = !!t.deleted;
   const el = document.createElement("div");
   el.className = "tool-item" + (t.id === state.activeId ? " active" : "")
-    + (st.cls === "running" ? " running" : "") + (st.cls === "done" ? " done" : "")
+    + (st.cls === "running" ? " running" : "") + (st.cls === "queued" ? " queued" : "")
+    + (st.cls === "done" ? " done" : "")
     + (trashed ? " trashed" : "");
   el.dataset.toolId = t.id;
   el.dataset.groupTag = groupTag;

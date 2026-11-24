@@ -14,6 +14,7 @@ export const LS = {
 // 字段类型定义
 export const FIELD_TYPES = {
   image:    "图片上传",
+  audio:    "音频上传",
   textarea: "多行文本",
   text:     "单行文本",
   number:   "数字",

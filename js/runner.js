@@ -41,14 +41,20 @@ export function saveResultsSession() {
 
 window.addEventListener("pagehide", saveResultsSession);
 
-// 结果按工具累计：新批次放最前，再次生成、切换工具都不清空，刷新页面仍保留，重启程序才重置
+// 结果按工具累计：新结果追加到同一网格末尾（旧图在左、新图在右，满行自动换行），
+// 再次生成、切换工具都不清空，刷新页面仍保留，重启程序才重置
 function appendResultBatch(toolId, resultHtml) {
-  const hasHistory = !!state.toolResults[toolId];
-  const stamp = new Date().toLocaleTimeString("zh-CN", { hour12: false });
-  const batchHtml = hasHistory
-    ? '<div class="result-batch"><div class="result-batch-head">生成于 ' + stamp + '</div>' + resultHtml + '</div>'
-    : resultHtml;
-  state.toolResults[toolId] = batchHtml + (state.toolResults[toolId] || "");
+  const box = document.createElement("div");
+  box.innerHTML = state.toolResults[toolId] || "";
+  const grid = document.createElement("div");
+  grid.className = "result-grid";
+  // 兼容旧存档里的批次结构：把历史结果项重新收进同一个网格
+  box.querySelectorAll(".result-item, .result-text").forEach(el => grid.appendChild(el));
+  const fresh = document.createElement("div");
+  fresh.innerHTML = resultHtml;
+  fresh.querySelectorAll(".result-grid > *").forEach(el => grid.appendChild(el));
+  // 本批次无输出（只有占位提示）且此前也没有结果时，直接展示占位提示
+  state.toolResults[toolId] = grid.childElementCount ? grid.outerHTML : resultHtml;
   if (state.activeId === toolId) document.getElementById("resultArea").innerHTML = state.toolResults[toolId];
   saveResultsSession();
 }
@@ -135,7 +141,7 @@ function captureActiveTask() {
   const fields = cloneValue(tool.fields || []);
   const files = Object.assign({}, state.fieldFiles);
   const values = fields.map((f, i) => {
-    if (f.type === "image") return "";
+    if (f.type === "image" || f.type === "audio") return "";
     if (f.type === "seed") return resolveSeedValue(tool, f, i);
     const el = document.getElementById("ff_" + i);
     const v = el ? el.value.trim() : "";
@@ -143,10 +149,10 @@ function captureActiveTask() {
   });
 
   // 仅当工具配置了输入项却全部为空时才视为配置错误；
-  // 无输入项的"零参数工作流"允许空 nodeInfoList 提交；有图片字段时允许空值提交
-  const hasImageField = fields.some(f => f.type === "image");
+  // 无输入项的"零参数工作流"允许空 nodeInfoList 提交；有图片/音频字段时允许空值提交
+  const hasFileField = fields.some(f => f.type === "image" || f.type === "audio");
   const hasValue = values.some(v => v !== "");
-  if (fields.length && !hasImageField && !hasValue) {
+  if (fields.length && !hasFileField && !hasValue) {
     showStatus("没有可提交的参数，请检查工具配置", "error");
     return null;
   }
@@ -167,8 +173,8 @@ async function executeRemote(run) {
   const nodeInfoList = [];
   for (let i = 0; i < task.fields.length; i++) {
     const f = task.fields[i];
-    if (f.type === "image") {
-      // 图片均可选：有文件则上传，无文件则提交空值，由远端校验并返回错误
+    if (f.type === "image" || f.type === "audio") {
+      // 图片/音频均可选：有文件则上传，无文件则提交空值，由远端校验并返回错误
       const file = task.files[i];
       if (file) {
         runStatus(run, "⏫ 正在上传「" + f.label + "」…（可点「立即取消」中断）");

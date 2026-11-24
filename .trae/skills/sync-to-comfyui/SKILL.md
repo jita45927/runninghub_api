@@ -33,6 +33,9 @@ js/covers.js
 
 `sync-core.ps1` at the repo root covers the first 8; `home.js` and `covers.js` must be copied manually (the script does not list them yet). Always back up the ComfyUI originals into `.core_backup_<timestamp>/` first.
 
+> **⚠ 不同步：系统工具隐藏 / 复制（仅 RunningHub）**
+> `toollist.js` 中的 `toolSourceOf` / `setToolTombstone` / `copyToolToUser` 调用、「系统 / 我的」来源徽标、回收站墓碑隐藏、永久移出与「重置系统工具」相关逻辑只属于 runninghub_api，**严禁同步到 COMFYUI_api**。同步 `toollist.js` 时只移植通用 UI 行为（如运行中/排队中/最近完成状态高亮），保留 ComfyUI 现有的回收站实现；否则会因 ComfyUI 的 `tools.js` 缺少上述导出而运行报错。`style.css` 中对应的 `.tool-source`、`.tool-copy` 样式同样无需同步。
+
 ### 1.2 Project-specific — adapt, do NOT copy verbatim
 ```
 server.py
