@@ -58,10 +58,9 @@ loadedTools.forEach((t, i) => {
   normalizeToolTags(t);
   migrateSeedFields(t);  // 旧的 seed 数字字段升级为随机种子字段
 });
-// 去重：同应用ID或同名的工具只保留第一个（清理历史遗留的重复项）
-// webappId 仅 RunningHub 配置有值，ComfyUI 侧为 undefined，此时按名称去重
-state.tools = loadedTools.filter((t, i) =>
-  loadedTools.findIndex(x => (t.webappId && x.webappId === t.webappId) || (t.name && x.name === t.name)) === i);
+// 不做按应用ID/名称的合并去重：不同配置文件即使 webappId 或名称相同也各自保留，
+// 避免用户自己的工具被静默丢弃；工具身份只由 id（对应配置文件）决定
+state.tools = loadedTools;
 
 try { state.activeId = localStorage.getItem(LS.active) || (state.tools[0] && state.tools[0].id); }
 catch (e) { state.activeId = state.tools[0] && state.tools[0].id; }

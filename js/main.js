@@ -11,7 +11,7 @@ import { appPanel, refreshKeyBtn } from "./ui/panels.js";
 import { scanToolsDir, loadToolsFromDir, toolsDirGranted, resetToolsCache, persistTool, resetSysTools } from "./tools.js";
 import { initUpdate } from "./update.js";
 import { initAnnouncement } from "./announcement.js";
-import { runActiveTool, queueActiveTool, cancelCurrentRun, clearQueuedRuns, restoreResultsSession } from "./runner.js";
+import { runActiveTool, queueActiveTool, cancelCurrentRun, clearQueuedRuns, restoreResultsSession, resumePendingTask } from "./runner.js";
 import { localFetch, setLocalToken } from "./api.js";
 
 let batDownloadDir = "";  // appinfo.txt 第二行：真实磁盘路径（唯一真相，server/资源管理器用）
@@ -146,8 +146,9 @@ async function ensureDownloadDirPerm() {
 }
 
 // 下载目录状态初始化（授权入口已统一到顶栏「初始设置」）
+// 返回 appinfo/session 处理完成的 Promise，供启动流程判断「会话是否已就绪」
 function initDirState() {
-  (async () => {
+  return (async () => {
     const info = await fetchAppinfo();
     if (info) {
       // 同一程序会话内刷新页面 → 结果和参数保留；重启启动工具.bat → session 变化 → 清空
@@ -196,21 +197,22 @@ async function grantToolsDir() {
 }
 
 // 配置目录状态初始化（授权入口已统一到顶栏「初始设置」）
+// 返回工具列表加载完成的 Promise，供启动流程在工具就绪后再恢复未完成任务
 function initToolsDirState() {
   // 本地服务模式：系统工具/我的工具由 server 合并提供，不再使用浏览器目录授权
-  if (location.protocol.startsWith("http")) { scanToolsDir(renderAll); return; }
-  if (!window.showDirectoryPicker) { scanToolsDir(renderAll); return; }
-  (async () => {
+  if (location.protocol.startsWith("http")) return scanToolsDir(renderAll);
+  if (!window.showDirectoryPicker) return scanToolsDir(renderAll);
+  return (async () => {
     try {
       const h = await idbGet("toolsDir");
-      if (!h) { scanToolsDir(renderAll); return; }
+      if (!h) { await scanToolsDir(renderAll); return; }
       state.toolsDirHandle = h;
       if (await toolsDirGranted()) {
-        if (!(await loadToolsFromDir(renderAll))) scanToolsDir(renderAll);
+        if (!(await loadToolsFromDir(renderAll))) await scanToolsDir(renderAll);
       } else {
-        scanToolsDir(renderAll);
+        await scanToolsDir(renderAll);
       }
-    } catch (e) { scanToolsDir(renderAll); }
+    } catch (e) { await scanToolsDir(renderAll); }
   })();
 }
 
@@ -556,14 +558,20 @@ document.addEventListener("rh:grant-tools-dir", () => { grantToolsDir(); });
 initLightbox();
 initModals(renderAll, appPanel);
 initSetupWizard({ grantToolsDir, grantDownloadDir });
-initDirState();
+const sessionReady = initDirState();
 initOpenDirButton();
 initQuitButton();
 initExternalLinks();
-initToolsDirState();
+const toolsReady = initToolsDirState();
 initUpdate();
 initAnnouncement();
 refreshKeyBtn();
 initPromptWeight();
 renderAll();
 showHomeView();  // 启动默认进入工具首页
+
+// 会话与工具列表都就绪后再尝试恢复刷新前未结束的任务：
+// 避免工具尚未加载时误判「工具已不存在」，也避免和首次渲染争抢界面
+Promise.all([sessionReady, toolsReady])
+  .then(() => resumePendingTask())
+  .catch(() => {});

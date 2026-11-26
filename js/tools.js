@@ -224,6 +224,13 @@ export async function loadToolsFromDir(renderAll) {
   if (!dh) return false;
   let changed = false;
   let n = 0;
+  // 按文件名稳定复用 id：同一文件保留原 id（选中状态/排序不跳变），
+  // 不同文件即使 webappId 或名称相同也各自保留，不做静默合并
+  const prevIdByFile = new Map();
+  state.tools.forEach(t => {
+    const f = state.toolFileNames[t.id];
+    if (f) prevIdByFile.set(f, t.id);
+  });
   try {
     for await (const [name, handle] of dh.entries()) {
       if (handle.kind !== "file" || !/\.rhtool\.json$/i.test(name)) continue;
@@ -235,14 +242,16 @@ export async function loadToolsFromDir(renderAll) {
         showStatus("⚠️ 配置文件「" + name + "」损坏，已跳过加载", "error");  // 单个文件损坏不影响其余加载
         continue;
       }
-      // 同应用ID或同名视为同一工具：以文件内容为准更新，并记住 id → 文件名映射
+      // 同一文件名复用原 id；新文件生成新 id，直接替换同 id 条目或追加
       t.tags = tagsOf(t);
       delete t.category;  // 旧版单值分类统一迁移为标签数组
       migrateSeedFields(t);  // 旧的 seed 数字字段升级为随机种子字段
-      const idx = state.tools.findIndex(x => (t.webappId && x.webappId === t.webappId) || (t.name && x.name === t.name));
-      if (idx >= 0) { t.id = state.tools[idx].id; state.tools[idx] = t; }
-      else { t.id = "t" + Date.now() + "_" + n++; state.tools.push(t); }
-      state.toolFileNames[t.id] = name;
+      const id = prevIdByFile.get(name) || "t" + Date.now() + "_" + n++;
+      t.id = id;
+      const idx = state.tools.findIndex(x => x.id === id);
+      if (idx >= 0) state.tools[idx] = t;
+      else state.tools.push(t);
+      state.toolFileNames[id] = name;
       changed = true;
     }
   } catch (e) { return false; }  // 句柄失效等情况，调用方回退 HTTP 扫描
@@ -277,46 +286,54 @@ export async function deleteToolFromDir(toolId) {
 }
 
 // ===== 统一持久化：本地服务可用时由 server 直接写 tools/，不再需要浏览器目录授权 =====
+// 返回值：成功写入的文件名；非 http 模式且没有目录句柄时返回 null（表示无磁盘可写）
+// http 模式下任何写入失败（网络异常 / 非 2xx / JSON 非 ok）都必须抛错，不能静默当作成功
 export async function persistTool(t) {
   if (!t) return null;
   if (location.protocol.startsWith("http")) {
+    const file = toolFileName(t);
+    const source = toolSourceOf(t);
+    let r;
     try {
-      const file = toolFileName(t);
-      const source = toolSourceOf(t);
-      const r = await localFetch("/save-tool", {
+      r = await localFetch("/save-tool", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ file, oldFile: state.toolFileNames[t.id] || "", source, content: toolToConfigJSON(t) })
       });
-      if (r.ok) {
-        const j = await r.json();
-        if (j && j.ok) {
-          state.toolFileNames[t.id] = j.file || file;  // 服务端可能已清理旧文件
-          state.toolSources[t.id] = j.source === "sys" ? "sys" : "user";  // sys 不可写时服务端会降级
-          return j.file || file;
-        }
-      }
-    } catch (e) { /* 旧版服务没有该接口，退回目录句柄 */ }
+    } catch (e) {
+      throw new Error("无法连接本地服务（" + ((e && e.message) || e) + "）");
+    }
+    let j = null;
+    try { j = await r.json(); } catch (e) { /* 非 JSON 响应按失败处理 */ }
+    if (!r.ok || !j || !j.ok) throw new Error((j && j.error) || ("HTTP " + r.status));
+    state.toolFileNames[t.id] = j.file || file;  // 服务端可能已清理旧文件
+    state.toolSources[t.id] = j.source === "sys" ? "sys" : "user";  // sys 不可写时服务端会降级
+    return j.file || file;
   }
   if (await toolsDirGranted()) return writeToolToDir(t);
   return null;
 }
 
 // 删除工具配置文件：sys 由服务端写墓碑隐藏，user 直接删除
+// http 模式下删除失败（网络异常 / 非 2xx / 响应异常）必须抛错，不能静默返回 false
 export async function removeToolFile(tool) {
   if (!tool) return false;
   if (location.protocol.startsWith("http")) {
+    let r;
     try {
-      const r = await localFetch("/delete-tool", {
+      r = await localFetch("/delete-tool", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ file: state.toolFileNames[tool.id] || toolFileName(tool), source: toolSourceOf(tool) })
       });
-      if (r.ok) {
-        delete state.toolFileNames[tool.id];
-        return true;
-      }
-    } catch (e) { /* 旧版服务没有该接口，退回目录句柄 */ }
+    } catch (e) {
+      throw new Error("无法连接本地服务（" + ((e && e.message) || e) + "）");
+    }
+    let j = null;
+    try { j = await r.json(); } catch (e) { /* 非 JSON 响应按失败处理 */ }
+    if (!r.ok || !j || !j.ok) throw new Error((j && j.error) || ("HTTP " + r.status));
+    delete state.toolFileNames[tool.id];
+    return true;
   }
   if (await toolsDirGranted()) {
     if (!state.toolFileNames[tool.id]) state.toolFileNames[tool.id] = toolFileName(tool);

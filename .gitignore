@@ -7,6 +7,9 @@ user_tools/
 # 测试截图缓存
 .screenshots/
 
+# 更新清单签名私钥（绝不入库）
+.private/
+
 appinfo.txt
 
 .trae-html-share-packages/

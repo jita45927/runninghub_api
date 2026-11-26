@@ -41,6 +41,32 @@ export function saveResultsSession() {
 
 window.addEventListener("pagehide", saveResultsSession);
 
+// ================= 未结束任务的持久化：刷新/重开页面后仍能继续查询、取消 =================
+// 任务创建成功（拿到 taskId）后立即写入，进入成功/失败/取消终态后清除。
+// 只记录查询所需的最小信息，恢复时绝不重新提交，避免重复扣费。
+const PENDING_TASK_KEY = "rh_pending_task_v1";
+
+function savePendingTask(rec) {
+  try { localStorage.setItem(PENDING_TASK_KEY, JSON.stringify(rec)); } catch (e) { /* 空间不足时忽略 */ }
+}
+
+function readPendingTask() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PENDING_TASK_KEY) || "null");
+    return raw && raw.taskId ? raw : null;
+  } catch (e) { return null; }
+}
+
+// 只清除属于该 taskId 的记录，避免新任务的记录被上一任务的收尾流程误删
+function clearPendingTask(taskId) {
+  if (taskId == null) return;
+  try {
+    const raw = readPendingTask();
+    if (raw && String(raw.taskId) !== String(taskId)) return;
+    localStorage.removeItem(PENDING_TASK_KEY);
+  } catch (e) { /* 忽略 */ }
+}
+
 // 结果按工具累计：新结果追加到同一网格末尾（旧图在左、新图在右，满行自动换行），
 // 再次生成、切换工具都不清空，刷新页面仍保留，重启程序才重置
 function appendResultBatch(toolId, resultHtml) {
@@ -220,6 +246,14 @@ async function executeRemote(run) {
   }
 
   run.taskId = taskId;
+  // 立即持久化：此后即使刷新/关闭窗口，也能按 taskId 继续查询，不会丢失计费中的任务
+  savePendingTask({
+    session: agentSession,
+    taskId,
+    toolId: task.toolId,
+    toolName: task.toolName,
+    createdAt: Date.now()
+  });
   runStatus(run, "⏳ 任务运行中（taskId: " + taskId + "）…");
   try {
     return await waitTask(taskId, run, (s, i) => {
@@ -333,10 +367,13 @@ async function processResults(run, results, usage) {
       if (filled) {
         saveTools();
         if (state.activeId === live.id) refreshSelectOptions(live);
+        optionTip = "；已自动补全 " + filled + " 个下拉列表的选项";
         try {
           await persistTool(live);
-        } catch (e) { /* 写目录失败时 localStorage 已更新 */ }
-        optionTip = "；已自动补全 " + filled + " 个下拉列表的选项";
+        } catch (e) {
+          // 写盘失败时 localStorage 已更新，本次可用；但要告诉用户刷新后可能丢失
+          optionTip += "，但写入配置文件失败（" + ((e && e.message) || e) + "），刷新后可能丢失";
+        }
       }
     } catch (e) { /* 接口可能不支持拉取，失败不影响本次结果 */ }
   }
@@ -355,8 +392,106 @@ async function processResults(run, results, usage) {
 }
 
 function finishCancelled(run) {
+  clearPendingTask(run.taskId);  // 取消是终态，不再需要恢复
   runStatus(run, "⏹ 已取消", "");
   showResultNotice(run.task.toolId, '<div class="result-placeholder">已取消</div>');
+}
+
+// ================= 刷新/重开后恢复运行中的任务 =================
+// 只按已持久化的 taskId 继续查询与收结果，绝不调用 createTask/uploadImage，
+// 因此不会重复提交、重复扣费。返回是否真的接管了一个任务。
+function findToolForPending(rec) {
+  const byId = state.tools.find(t => t.id === rec.toolId);
+  if (byId) return byId;
+  // 工具 id 由页面会话生成，刷新后可能变化；名称是配置里的稳定标识，作为兜底匹配
+  const name = rec.toolName && rec.toolName !== "result" ? rec.toolName : "";
+  return name ? (state.tools.find(t => t.name === name) || null) : null;
+}
+
+export async function resumePendingTask() {
+  if (!location.protocol.startsWith("http")) return false;  // file:// 模式没有本地服务
+  if (!agentSession) return false;
+  if (state.currentRun || queuePumping) return false;
+
+  const rec = readPendingTask();
+  if (!rec) return false;
+
+  // session 不同说明记录来自上一次程序启动（结果区已重置），直接丢弃
+  if (!rec.session || rec.session !== agentSession) {
+    clearPendingTask(rec.taskId);
+    return false;
+  }
+
+  // 工具列表为空多半是本次加载失败：先保留记录，避免把仍可能计费的任务直接丢弃
+  if (!state.tools.length) {
+    showStatus("无法恢复上次任务：工具列表尚未加载，请刷新页面重试（任务可能仍在计费，可到 RunningHub 控制台查看）", "error");
+    return false;
+  }
+
+  const tool = findToolForPending(rec);
+  if (!tool || tool.deleted) {
+    clearPendingTask(rec.taskId);
+    showStatus("上次任务所属工具已不存在，无法恢复该任务（可到 RunningHub 控制台查看）", "error");
+    return false;
+  }
+
+  // 恢复时没有本地快照，只构造查询/取消所需的最小运行态
+  const run = {
+    id: ++runSerial,
+    taskId: rec.taskId,
+    cancelled: false,
+    paused: false,
+    abort: new AbortController(),
+    task: { toolId: tool.id, toolName: rec.toolName || tool.name || "result" }
+  };
+  statusOwner = run.id;
+  state.currentRun = run;
+  state.runningToolId = tool.id;
+  notifyToolStatus();  // 取消按钮立即可用
+  runStatus(run, "⏳ 正在恢复上次未完成的任务（taskId: " + rec.taskId + "）…");
+
+  try {
+    const result = await waitTask(rec.taskId, run, (s, i) => {
+      runStatus(run, "⏳ 上次任务状态：" + (s || "未知") + "（已等待 " + (i * 3 + 3) + " 秒）");
+    });
+    if (result.cancelled) {
+      finishCancelled(run);
+    } else {
+      clearPendingTask(rec.taskId);
+      state.lastDoneToolId = tool.id;
+      saveLastDone();
+      // 结果按工具归档：用户此刻停留在别的工具时，只写该工具的存档，不抢当前界面
+      processResults(run, result.results || [], result.usage || {}).catch(err => {
+        showResultNotice(tool.id, '<div class="result-placeholder">结果处理失败</div>');
+        runStatus(run, "❌ 结果处理失败：" + err.message, "error");
+      });
+      notifyToolStatus();
+    }
+  } catch (err) {
+    if (run.cancelled || (err && err.name === "AbortError")) {
+      finishCancelled(run);
+    } else if (/^任务执行失败：/.test(err && err.message || "")) {
+      // 远端明确失败：任务已是终态，记录可以清除
+      clearPendingTask(rec.taskId);
+      showResultNotice(tool.id, '<div class="result-placeholder">生成失败</div>');
+      runStatus(run, "❌ " + err.message, "error");
+    } else {
+      // 网络错误/超时：任务可能仍在运行并继续计费，保留记录供下次刷新重试
+      run.paused = true;
+      state.runQueuePaused = true;
+      runStatus(run, "❌ 无法恢复上次任务：" + (err && err.message || "未知错误")
+        + "；请到 RunningHub 控制台查看，任务可能仍在计费，也可点「立即取消」", "error");
+    }
+  } finally {
+    if (!run.paused && state.currentRun === run) {
+      state.currentRun = null;
+      state.runningToolId = null;
+    }
+    notifyToolStatus();
+  }
+  // 恢复期间用户可能已把其他任务加入列队：交给现有 FIFO 消费器接手
+  void pumpRunQueue();
+  return true;
 }
 
 // 唯一 FIFO 消费器：远端明确完成后先续跑，下载与结果处理在后台并行完成
@@ -386,6 +521,7 @@ async function pumpRunQueue() {
         if (result.cancelled) {
           finishCancelled(run);
         } else {
+          clearPendingTask(run.taskId);  // 任务已成功结束，记录不再需要
           state.lastDoneToolId = task.toolId;
           saveLastDone();
           processResults(run, result.results || [], result.usage || {}).catch(err => {
@@ -398,6 +534,8 @@ async function pumpRunQueue() {
         if ((err && err.name === "AbortError") || run.cancelled) {
           finishCancelled(run);
         } else {
+          // 远端状态未确定时保留记录：任务可能仍在运行，下次刷新还能继续查询/取消
+          if (!(err && err.remoteUncertain)) clearPendingTask(run.taskId);
           runStatus(run, "❌ " + err.message, "error");
           showResultNotice(task.toolId, '<div class="result-placeholder">生成失败</div>');
           if (err.remoteUncertain) {

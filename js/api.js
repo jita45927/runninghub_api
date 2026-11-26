@@ -117,12 +117,20 @@ export async function fetchNodeList(tool) {
   if (!key) throw new Error("未设置 API Key");
   const isWf = tool.toolType === "workflow";
   const path = isWf ? "/api/workflow/apiCallDemo" : "/api/webapp/apiCallDemo";
-  const qs = "?apiKey=" + encodeURIComponent(key)
-    + "&" + (isWf ? "workflowId" : "webappId") + "=" + encodeURIComponent(tool.webappId);
-  const resp = await fetch(base() + path + qs, {
-    headers: { "Authorization": "Bearer " + key }
-  });
-  const json = await parseRespJson(resp);
+  const idQs = (isWf ? "workflowId" : "webappId") + "=" + encodeURIComponent(tool.webappId);
+  const headers = { "Authorization": "Bearer " + key };
+  let json = null;
+  // 优先只用 Authorization 头，避免 API Key 出现在 URL（浏览器历史、服务端访问日志）
+  try {
+    const resp = await fetch(base() + path + "?" + idQs, { headers });
+    json = await parseRespJson(resp);
+  } catch (e) { json = null; }
+  if (!json || json.code !== 0) {
+    // 旧接口兼容例外：部分部署只认 ?apiKey= 查询参数，此时才退回该形式重试一次
+    const legacyQs = "apiKey=" + encodeURIComponent(key) + "&" + idQs;
+    const resp = await fetch(base() + path + "?" + legacyQs, { headers });
+    json = await parseRespJson(resp);
+  }
   if (json.code !== 0 || !json.data) throw new Error(json.msg || "获取节点信息失败");
   return json.data.nodeInfoList || [];
 }

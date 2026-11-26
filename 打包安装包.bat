@@ -44,7 +44,7 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-python -c "from PIL import Image; import pystray._win32; import win32api; print('核心依赖导入检查通过')"
+python -c "from PIL import Image; import pystray._win32; import win32api; from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey; print('核心依赖导入检查通过')"
 if errorlevel 1 (
   echo [错误] 核心依赖无法导入，已停止打包。
   pause
@@ -120,6 +120,60 @@ if not exist "installer\RunningHub-AI-Toolbox-Setup-%APP_VER%.exe" (
   exit /b 1
 )
 
+echo [签名] 安装包 Authenticode 签名（可选，主要用于减少 SmartScreen 提示） ...
+set "SETUP_EXE=installer\RunningHub-AI-Toolbox-Setup-%APP_VER%.exe"
+rem 自动更新的真实性由 release 分支清单的 Ed25519 签名保证，不强制要求安装包 Authenticode
+if not defined RH_SIGN_PFX goto :skip_sign
+
+rem ---- 已设置 RH_SIGN_PFX：定位 signtool ----
+set "SIGNTOOL="
+for /f "delims=" %%I in ('where signtool 2^>nul') do if not defined SIGNTOOL set "SIGNTOOL=%%I"
+set "KITS_BIN=%ProgramFiles(x86)%\Windows Kits\10\bin"
+if not defined SIGNTOOL (
+  rem 取 bin 下版本号最大的 x64\signtool.exe
+  for /f "delims=" %%D in ('dir /b /ad /o-n "%KITS_BIN%" 2^>nul') do (
+    if not defined SIGNTOOL if exist "%KITS_BIN%\%%D\x64\signtool.exe" set "SIGNTOOL=%KITS_BIN%\%%D\x64\signtool.exe"
+  )
+)
+if not defined SIGNTOOL (
+  echo [错误] 未找到 signtool.exe，无法签名安装包。
+  echo        请安装 Windows SDK（含签名工具），或把 signtool 加入 PATH。
+  pause
+  exit /b 1
+)
+echo    签名工具：%SIGNTOOL%
+rem 证书密码只作为命令参数传给 signtool，不打印到屏幕或日志
+set "SIGN_ARGS=sign /fd SHA256 /f "%RH_SIGN_PFX%""
+if defined RH_SIGN_PASS set "SIGN_ARGS=%SIGN_ARGS% /p "%RH_SIGN_PASS%""
+set "SIGN_ARGS=%SIGN_ARGS% /tr http://timestamp.digicert.com /td SHA256 "%SETUP_EXE%""
+"%SIGNTOOL%" %SIGN_ARGS%
+if errorlevel 1 (
+  echo [错误] 安装包签名失败，请检查证书路径、密码与时间戳服务。
+  pause
+  exit /b 1
+)
+echo    校验签名 ...
+"%SIGNTOOL%" verify /pa "%SETUP_EXE%"
+if errorlevel 1 (
+  echo [错误] 安装包签名校验失败，已停止打包。
+  pause
+  exit /b 1
+)
+echo    签名完成（Authenticode 仅影响 SmartScreen 提示；自动更新依赖清单 Ed25519 签名）。
+goto :sign_done
+
+:skip_sign
+echo.
+echo ============================================================
+echo [提示] 未做 Authenticode 签名（不影响自动更新）。
+echo        自动更新使用 release 分支清单的 Ed25519 签名校验；
+echo        发布时请确保 .private\update_signing_key.pem 存在，
+echo        然后运行 python 发布更新.py --publish。
+echo        未做 Authenticode 时，手动安装可能显示“未知发布者”。
+echo ============================================================
+echo.
+
+:sign_done
 echo [6/6] 生成更新清单 build\latest.json ...
 python 发布更新.py --generate-only
 if errorlevel 1 (

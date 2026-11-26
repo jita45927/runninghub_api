@@ -14,6 +14,8 @@ import re
 import subprocess
 import sys
 
+import update_sign
+
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OWNER_REPO = "jita45927/runninghub_api"
 GITEE_OWNER_REPO = "matt8469/runninghub_api"
@@ -89,6 +91,24 @@ def write_manifest(manifest):
     return path
 
 
+def sign_manifest_or_exit(manifest, required):
+    """用本地私钥签名清单。发布时必须成功；仅生成时可先产出未签名清单。"""
+    try:
+        signed = update_sign.sign_manifest(manifest)
+    except FileNotFoundError:
+        if required:
+            raise SystemExit(
+                "未找到更新签名私钥：%s\n"
+                "请先运行 python update_sign.py --generate，并妥善备份私钥。" % update_sign.default_key_path())
+        print("警告：未找到签名私钥，已生成未签名清单；该清单不能用于正式发布。")
+        print("      生成私钥：python update_sign.py --generate")
+        return manifest, False
+    except Exception as e:
+        raise SystemExit("更新清单签名失败：%s" % e)
+    print("更新清单已签名（Ed25519）")
+    return signed, True
+
+
 def github_release(manifest):
     exe = os.path.join(ROOT, "installer", manifest["installer"]["name"])
     tag = "v" + manifest["version"]
@@ -157,6 +177,7 @@ def main():
 
     version = read_version()
     manifest = build_manifest(version)
+    manifest, signed = sign_manifest_or_exit(manifest, required=(args.publish or args.github))
     path = write_manifest(manifest)
     print("已生成更新清单：" + path)
     print("版本 %s  大小 %d  SHA256 %s" % (version, manifest["installer"]["size"],

@@ -395,27 +395,38 @@ export function initModals(renderAll, panel) {
       data.id = "t" + Date.now();
       state.tools.push(data);
       state.activeId = data.id;
+      editingToolId = data.id;  // 写盘失败重试时更新同一条，避免重复新增
     }
     saveTools();
     saveActiveId();
-    toolModal.classList.remove("show");
     renderAll();
     // 应用专属的保存后处理（可选钩子，未实现的程序会跳过）
-    const savedTool = state.tools.find(x => x.id === (editingToolId || data.id));
+    const savedTool = state.tools.find(x => x.id === editingToolId);
     const saveSource = toolSourceOf(savedTool);
     if (savedTool && appPanel.afterToolSave) {
       try { appPanel.afterToolSave(savedTool, prevName, saveSource); }
       catch (e) { /* 钩子异常不影响工具保存 */ }
     }
-    // 写回配置目录：sys 写系统目录，user 写我的工具目录
-    try {
-      const saved = state.tools.find(x => x.id === (editingToolId || data.id));
-      const fn = await persistTool(saved);
-      if (fn) showStatus("已保存到 " + (toolSourceOf(saved) === "sys" ? "系统工具" : "我的工具") + " 目录/" + fn
-        + (toolSourceOf(saved) === "sys" ? "（提示：系统工具修改会在程序更新时被覆盖，可复制为我的工具）" : "")
-        + (mapWarnNames.length ? "；⚠ 注意：字段「" + mapWarnNames.join("、") + "」的映射值含非数字项，如需提交数字请改成纯数字" : ""),
-        mapWarnNames.length ? "error" : "success");
-    } catch (err) { showStatus("写入配置目录失败：" + err.message, "error"); }
+    // 写回配置目录：sys 写系统目录，user 写我的工具目录；写盘成功后才提示并关闭弹窗
+    let fn = null;
+    let writeErr = null;
+    try { fn = await persistTool(savedTool); } catch (err) { writeErr = err; }
+    if (writeErr) {
+      // 保持弹窗打开，避免用户以为已经保存到磁盘
+      showStatus("写入配置目录失败：" + writeErr.message + "（修改仅保留在当前页面，未写入磁盘）", "error");
+      return;
+    }
+    if (!fn) {
+      // 非 http 且未授权配置目录：只能保存在浏览器缓存，明确提示未写入磁盘
+      showStatus("未找到可写入的工具配置目录，修改仅保存在浏览器缓存中", "error");
+      toolModal.classList.remove("show");
+      return;
+    }
+    showStatus("已保存到 " + (toolSourceOf(savedTool) === "sys" ? "系统工具" : "我的工具") + " 目录/" + fn
+      + (toolSourceOf(savedTool) === "sys" ? "（提示：系统工具修改会在程序更新时被覆盖，可复制为我的工具）" : "")
+      + (mapWarnNames.length ? "；⚠ 注意：字段「" + mapWarnNames.join("、") + "」的映射值含非数字项，如需提交数字请改成纯数字" : ""),
+      mapWarnNames.length ? "error" : "success");
+    toolModal.classList.remove("show");
   };
   document.getElementById("deleteToolBtn").onclick = async () => {
     if (!editingToolId) return;
@@ -428,6 +439,22 @@ export function initModals(renderAll, panel) {
       ? "「" + (delTool.name || "未命名") + "」是系统工具，将标记为删除并隐藏（程序更新后也不会自动恢复）。\n\n可用「重置系统工具」找回。"
       : "「" + (delTool.name || "未命名") + "」会被移动到回收站列表，并不会彻底删除配置文件。\n\n回收站中的工具不可使用，可随时还原。")) return;
     delTool.deleted = true;
+    // 先完成写盘/墓碑：失败则恢复列表状态并保持弹窗打开，避免“界面已删、磁盘还在”
+    try {
+      if (isSys && delTool.webappId) {
+        if (!(await setToolTombstone(delTool.webappId, true))) throw new Error("写入删除标记失败");
+      } else if (isSys) {
+        await removeToolFile(delTool);
+      } else {
+        await persistTool(delTool);
+      }
+    } catch (err) {
+      delete delTool.deleted;
+      saveTools();
+      renderAll();
+      showStatus("删除失败：" + err.message + "（工具未移入回收站）", "error");
+      return;
+    }
     if (state.activeId === delTool.id) {
       const first = state.tools.find(x => !x.deleted);
       state.activeId = first ? first.id : null;
@@ -436,11 +463,8 @@ export function initModals(renderAll, panel) {
     saveActiveId();
     toolModal.classList.remove("show");
     renderAll();
-    try {
-      if (isSys && delTool.webappId) await setToolTombstone(delTool.webappId, true);
-      else if (isSys) await removeToolFile(delTool);
-      else await persistTool(delTool);
-    } catch (err) { /* 配置文件写入失败不影响列表状态 */ }
+    showStatus(isSys ? "已从系统工具中移除，可在「初始设置 → 重置系统工具」找回"
+      : "已移入回收站，配置文件保留在我的工具目录", "ok");
   };
 
   // 弹窗通用关闭

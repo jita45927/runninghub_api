@@ -1,4 +1,5 @@
 # 运行依赖（Windows）
 Pillow==12.2.0
 pystray==0.19.5
+cryptography==50.0.2
 pywin32==312; sys_platform == "win32"
