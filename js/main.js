@@ -10,6 +10,7 @@ import { initModals, initSetupWizard } from "./ui/modal.js";
 import { appPanel, refreshKeyBtn } from "./ui/panels.js";
 import { scanToolsDir, loadToolsFromDir, toolsDirGranted, resetToolsCache, persistTool, resetSysTools } from "./tools.js";
 import { initUpdate } from "./update.js";
+import { initAnnouncement } from "./announcement.js";
 import { runActiveTool, queueActiveTool, cancelCurrentRun, clearQueuedRuns, restoreResultsSession } from "./runner.js";
 import { localFetch, setLocalToken } from "./api.js";
 
@@ -561,6 +562,7 @@ initQuitButton();
 initExternalLinks();
 initToolsDirState();
 initUpdate();
+initAnnouncement();
 refreshKeyBtn();
 initPromptWeight();
 renderAll();

@@ -8,7 +8,9 @@ export const LS = {
   active: "rh_active_v4",
   // 以下两个键供公共核心的 store.js 使用，两个应用各自定义自己的键名
   cats: "rhtool_cats_v1",
-  lastDone: "rhtool_last_done_v1"
+  lastDone: "rhtool_last_done_v1",
+  // 公众号公告已读记录：只存条目 id
+  annSeen: "rh_ann_seen_v1"
 };
 
 // 字段类型定义

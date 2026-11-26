@@ -53,6 +53,19 @@ UPDATE_ALLOWED_HOSTS = {"gitee.com", "giteeusercontent.com", "raw.githubusercont
                         "github.com", "objects.githubusercontent.com",
                         "github-releases.githubusercontent.com", "cdn.jsdelivr.net",
                         "aliyuncs.com"}
+# ===== 公众号公告 =====
+# 与更新清单同源同白名单：公告由本地服务代理拉取，前端只访问本地接口
+ANNOUNCEMENT_MANIFEST_URLS = [
+    "https://gitee.com/matt8469/runninghub_api/raw/release/update/announcement.json",
+    "https://cdn.jsdelivr.net/gh/jita45927/runninghub_api@release/update/announcement.json",
+    "https://raw.githubusercontent.com/jita45927/runninghub_api/release/update/announcement.json",
+]
+ANNOUNCEMENT_ALLOWED_HOST = "mp.weixin.qq.com"
+ANNOUNCEMENT_MAX_ITEMS = 20
+ANNOUNCEMENT_CACHE_TTL = 300  # 5 分钟内存缓存，避免多个页面重复拉取
+_ANN_LOCK = threading.Lock()
+_ANN_CACHE = {"ts": 0.0, "payload": None}
+
 UPDATE_DIR = os.path.join(DATA_DIR, "update")
 UPDATE_FILE_NAME = "RunningHubToolbox-update.exe"
 UPDATE_INSTALL_HOOK = None  # 由 launcher 注入：关闭窗口/托盘后静默安装并退出
@@ -453,6 +466,64 @@ def _fetch_update_manifest():
             errors.append("%s：%s" % (host, e))
     raise RuntimeError("无法获取更新清单，请检查网络后重试（%s）" % "；".join(errors))
 
+def _validate_announcement_url(url):
+    """公告链接只允许微信公众号文章，防止清单被改成任意站点。"""
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").rstrip(".").lower()
+    if parsed.scheme != "https" or host != ANNOUNCEMENT_ALLOWED_HOST:
+        raise ValueError("公告链接必须是 https://mp.weixin.qq.com/ 文章")
+    if parsed.username or parsed.password:
+        raise ValueError("公告链接不能带账号密码")
+    if parsed.port not in (None, 443):
+        raise ValueError("公告链接只允许默认 HTTPS 端口")
+    return url
+
+def _normalize_announcement_items(raw):
+    """逐条校验公告；单条不合法只丢弃该条，不影响整份清单。"""
+    items, used = [], set()
+    for it in raw if isinstance(raw, list) else []:
+        if not isinstance(it, dict):
+            continue
+        aid = str(it.get("id") or "").strip()[:64]
+        title = str(it.get("title") or "").strip()[:40]
+        published = str(it.get("publishedAt") or "").strip()
+        if not aid or not title or aid in used:
+            continue
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", published):
+            continue
+        try:
+            _validate_announcement_url(str(it.get("url") or "").strip())
+        except ValueError:
+            continue
+        used.add(aid)
+        items.append({
+            "id": aid,
+            "title": title,
+            "summary": str(it.get("summary") or "").strip()[:80],
+            "url": str(it.get("url") or "").strip(),
+            "publishedAt": published,
+        })
+    items.sort(key=lambda x: x["publishedAt"], reverse=True)
+    return items[:ANNOUNCEMENT_MAX_ITEMS]
+
+def _fetch_announcement_manifest():
+    """按 Gitee → jsDelivr → GitHub 顺序拉取公告清单，失败自动切源。"""
+    errors = []
+    for url in ANNOUNCEMENT_MANIFEST_URLS:
+        host = urlparse(url).hostname or url
+        try:
+            _validate_update_url(url)
+            req = urllib.request.Request(url, headers={"User-Agent": "RunningHubToolbox/%s" % APP_VERSION})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                _validate_update_url(r.geturl() or url)
+                obj = json.loads(r.read().decode("utf-8"))
+            if not isinstance(obj, dict) or obj.get("schema") != 1:
+                raise ValueError("公告清单格式不正确")
+            return obj
+        except Exception as e:
+            errors.append("%s：%s" % (host, e))
+    raise RuntimeError("无法获取公告（%s）" % "；".join(errors))
+
 def _update_state_snapshot():
     with _UPDATE_LOCK:
         return dict(_UPDATE_STATE)
@@ -602,6 +673,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._handle_reset_sys_tools()
         elif parsed.path == "/update/check":
             self._handle_update_check()
+        elif parsed.path == "/announcement/check":
+            self._handle_announcement_check()
         elif parsed.path == "/update/download":
             self._handle_update_download()
         elif parsed.path == "/update/cancel":
@@ -1075,6 +1148,29 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "size": int(installer.get("size") or 0),
             "page": manifest.get("page") or "",
         })
+
+    # ---------- 公众号公告 ----------
+    def _handle_announcement_check(self):
+        now = time.time()
+        with _ANN_LOCK:
+            payload, ts = _ANN_CACHE.get("payload"), _ANN_CACHE.get("ts") or 0
+        if payload is not None and now - ts < ANNOUNCEMENT_CACHE_TTL:
+            self._send_json(200, payload)
+            return
+        try:
+            manifest = _fetch_announcement_manifest()
+        except Exception as e:
+            self._send_json(200, {"ok": False, "error": str(e)})
+            return
+        payload = {
+            "ok": True,
+            "updatedAt": str(manifest.get("updatedAt") or ""),
+            "items": _normalize_announcement_items(manifest.get("items")),
+        }
+        with _ANN_LOCK:
+            _ANN_CACHE["ts"] = now
+            _ANN_CACHE["payload"] = payload
+        self._send_json(200, payload)
 
     def _handle_update_download(self):
         obj = self._read_json_body()

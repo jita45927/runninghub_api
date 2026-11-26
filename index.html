@@ -46,6 +46,7 @@
   <a href="https://www.runninghub.cn/user-center/1958354621356011522/webapp?inviteCode=v6f54jwt" target="_blank" rel="noopener">我的主页 · AI马特</a>
   <a href="https://space.bilibili.com/1351334510?spm_id_from=333.337.0.0" target="_blank" rel="noopener">Bilibili · AI马特</a>
   <button class="promo-qr" id="promoQrBtn" title="点击查看微信公众号二维码"><img src="ICO/wx-qr.jpg" alt="微信公众号二维码"><span>微信公众号</span></button>
+  <button class="ann-btn" id="annBtn" title="查看公众号公告" style="display:none">📢 公告<em class="ann-badge" id="annBadge" style="display:none"></em></button>
   <button class="guide-btn" id="guideBtn" title="首次使用分步向导">📖 使用指南</button>
   <span class="repo-group">
     <a href="https://github.com/jita45927/runninghub_api" target="_blank" rel="noopener">GITHUB仓库地址</a>
@@ -367,6 +368,21 @@
       <div></div>
       <div class="right">
         <button class="btn ghost" data-close="wxQrModal">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 公众号公告弹窗 -->
+<div class="modal-mask" id="annModal">
+  <div class="modal" style="width:520px">
+    <h3>📢 公众号公告</h3>
+    <div class="modal-sub">最新文章与更新说明，点击条目用浏览器打开</div>
+    <div class="ann-list" id="annList"><div class="ann-empty">暂无公告</div></div>
+    <div class="modal-actions">
+      <div><button class="btn ghost" id="annReadAllBtn">全部标为已读</button></div>
+      <div class="right">
+        <button class="btn ghost" data-close="annModal">关闭</button>
       </div>
     </div>
   </div>
