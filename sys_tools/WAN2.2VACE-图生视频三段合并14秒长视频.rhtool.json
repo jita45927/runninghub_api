@@ -1,0 +1,79 @@
+{
+  "type": "runninghub-tool-config",
+  "version": 1,
+  "name": "WAN2.2VACE-图生视频三段合并14秒长视频",
+  "icon": "🎞️",
+  "desc": "WAN2.2 VACE图生视频工作流：上传一张首帧图片，按两段提示词连续生成三段视频并自动拼接为约14秒长视频；可调整视频宽高、总步数与随机种子",
+  "sourceUrl": "https://www.runninghub.cn/post/1992163587452104705",
+  "toolType": "workflow",
+  "webappId": "1992163587452104705",
+  "instanceType": "default",
+  "tags": [
+    "视频生成"
+  ],
+  "fields": [
+    {
+      "label": "上传首帧图片",
+      "type": "image",
+      "nodeId": "229",
+      "fieldName": "image",
+      "def": ""
+    },
+    {
+      "label": "第一段提示词",
+      "type": "textarea",
+      "nodeId": "232",
+      "fieldName": "text",
+      "def": "一个女孩背对镜头优雅的拎着高跟鞋赤脚在沙滩上向前走，动作优雅缓慢柔美，摄像机跟随女孩的身影移动，海浪拍打着沙滩，海风吹起女孩的头发。"
+    },
+    {
+      "label": "第二段提示词",
+      "type": "textarea",
+      "nodeId": "234",
+      "fieldName": "text",
+      "def": "(天空划过流星雨:1.4)，一个女孩背对镜头拎着高跟鞋赤脚在沙滩上正在向前走，动作优雅缓慢柔美，摄像机跟随女孩的身影移动.海浪拍打着沙滩，海风吹起女孩的头发。"
+    },
+    {
+      "label": "第三段提示词",
+      "type": "textarea",
+      "nodeId": "237",
+      "fieldName": "text",
+      "def": "女孩停下脚步抬头看向远方的流星，摄像机推近女孩的背影，海浪拍打着沙滩，海风吹起女孩的头发。"
+    },
+    {
+      "label": "单段视频长度（帧）",
+      "type": "number",
+      "nodeId": "81",
+      "fieldName": "value",
+      "def": "81"
+    },
+    {
+      "label": "视频宽度",
+      "type": "number",
+      "nodeId": "79",
+      "fieldName": "value",
+      "def": "832"
+    },
+    {
+      "label": "视频高度",
+      "type": "number",
+      "nodeId": "80",
+      "fieldName": "value",
+      "def": "480"
+    },
+    {
+      "label": "总步数",
+      "type": "number",
+      "nodeId": "245",
+      "fieldName": "value",
+      "def": "8"
+    },
+    {
+      "label": "随机种子（第一段）",
+      "type": "seed",
+      "nodeId": "226",
+      "fieldName": "seed",
+      "def": "26635108265262"
+    }
+  ]
+}

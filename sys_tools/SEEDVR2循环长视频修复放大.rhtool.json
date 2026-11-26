@@ -1,0 +1,37 @@
+{
+  "type": "runninghub-tool-config",
+  "version": 1,
+  "name": "SEEDVR2循环长视频修复放大",
+  "icon": "🔍",
+  "desc": "上传视频，SeedVR2 循环分段修复并放大长视频；可设置放大尺寸短边与单次处理帧数，适合分辨率偏低或画面模糊的视频",
+  "sourceUrl": "https://www.runninghub.cn/ai-detail/2035374908624084993?aiSource=workflow_jump",
+  "toolType": "app",
+  "webappId": "2035374908624084993",
+  "instanceType": "default",
+  "tags": [
+    "超分放大"
+  ],
+  "fields": [
+    {
+      "label": "上传视频",
+      "type": "video",
+      "nodeId": "3",
+      "fieldName": "video",
+      "def": ""
+    },
+    {
+      "label": "放大尺寸短边（建议不超过1080）",
+      "type": "number",
+      "nodeId": "77",
+      "fieldName": "value",
+      "def": "1080"
+    },
+    {
+      "label": "单次处理帧数（建议30-50）",
+      "type": "number",
+      "nodeId": "15",
+      "fieldName": "value",
+      "def": "50"
+    }
+  ]
+}

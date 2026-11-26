@@ -1,0 +1,65 @@
+{
+  "type": "runninghub-tool-config",
+  "version": 1,
+  "name": "wan2_2_14B首尾帧生视频",
+  "icon": "🎞️",
+  "desc": "WAN2.2 14B首尾帧生视频：上传首帧与尾帧图片并填写提示词，生成两图之间过渡的短视频；可调整视频宽高、时长与采样步数",
+  "sourceUrl": "https://www.runninghub.cn/ai-detail/2031424325097627649",
+  "toolType": "app",
+  "webappId": "2031424325097627649",
+  "instanceType": "default",
+  "tags": [
+    "视频生成"
+  ],
+  "fields": [
+    {
+      "label": "上传首帧图片",
+      "type": "image",
+      "nodeId": "62",
+      "fieldName": "image",
+      "def": ""
+    },
+    {
+      "label": "上传尾帧图片",
+      "type": "image",
+      "nodeId": "71",
+      "fieldName": "image",
+      "def": ""
+    },
+    {
+      "label": "视频提示词",
+      "type": "textarea",
+      "nodeId": "94",
+      "fieldName": "text",
+      "def": "镜头拉远，微笑，向观众挥手"
+    },
+    {
+      "label": "视频宽度（最长边不超过1024）",
+      "type": "number",
+      "nodeId": "85",
+      "fieldName": "value",
+      "def": "832"
+    },
+    {
+      "label": "视频高度（最长边不超过1024）",
+      "type": "number",
+      "nodeId": "86",
+      "fieldName": "value",
+      "def": "480"
+    },
+    {
+      "label": "视频时长（秒，建议5-8）",
+      "type": "number",
+      "nodeId": "82",
+      "fieldName": "value",
+      "def": "5"
+    },
+    {
+      "label": "采样步数（建议2-4，同步高/低噪）",
+      "type": "number",
+      "nodeId": "83",
+      "fieldName": "value",
+      "def": "3"
+    }
+  ]
+}

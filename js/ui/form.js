@@ -7,7 +7,7 @@ import { bindLocalFallback } from "./results.js";
 import { openMaskEditor, clearMaskCache } from "./maskeditor.js";
 
 // ================= 自定义字段类型扩展点 =================
-// 公共代码只内置 image / text / textarea / select / number；
+// 公共代码只内置 image / audio / video / text / textarea / select / number；
 // 其他类型（如 ComfyUI 的 model / combo）由各应用自行注册渲染与加载逻辑
 const customRenderers = new Map();
 const customLoaders = new Map();
@@ -25,6 +25,8 @@ const fieldPreviewUrls = new Map();
 const baseKey = idx => (activeTool() ? activeTool().id : "tool") + "_" + idx;
 // 音频上传区的默认提示文案（选择/清空后复用）
 const AUDIO_HINT = '单击选择音频，或拖拽到这里<br><small style="color:#4a5470">MP3 / WAV / FLAC / M4A，≤30MB</small>';
+// 视频上传区的默认提示文案
+const VIDEO_HINT = '单击选择视频，或拖拽到这里<br><small style="color:#4a5470">MP4 / MOV / WEBM，≤200MB</small>';
 
 // 参数值的存储键：nodeId + 字段名（配置改动后仍能对应上，不用下标）
 const fieldKey = f => String(f.nodeId || "") + "|" + String(f.fieldName || "");
@@ -128,7 +130,7 @@ export function renderWorkspace() {
   }
 
   form.innerHTML = '<div class="form-grid">' + t.fields.map((f, i) => {
-    const span = (f.type === "textarea" || f.type === "image" || f.type === "audio") ? " span2" : "";
+    const span = (f.type === "textarea" || f.type === "image" || f.type === "audio" || f.type === "video") ? " span2" : "";
     // 应用注册的自定义类型优先
     const custom = customRenderers.get(f.type);
     if (custom) return custom({ t, f, i, span, value: savedFieldValue(t, f, ""), saved: fb => savedFieldValue(t, f, fb), savedMode: fb => savedFieldExtra(t, f, "|mode", fb) });
@@ -144,6 +146,13 @@ export function renderWorkspace() {
         <label>${esc(f.label)}</label>
         <div class="upload-area upload-audio" id="ua_${i}"><span>${AUDIO_HINT}</span></div>
         <input type="file" id="fi_${i}" accept="audio/*,.mp3,.wav,.flac,.m4a,.ogg,.aac" style="display:none">
+      </div>`;
+    }
+    if (f.type === "video") {
+      return `<div class="field${span}">
+        <label>${esc(f.label)}</label>
+        <div class="upload-area upload-audio upload-video" id="ua_${i}"><span>${VIDEO_HINT}</span></div>
+        <input type="file" id="fi_${i}" accept="video/*,.mp4,.mov,.webm,.mkv,.avi,.m4v" style="display:none">
       </div>`;
     }
     if (f.type === "textarea") {
@@ -162,13 +171,13 @@ export function renderWorkspace() {
     return `<div class="field${span}"><label>${esc(f.label)}</label><input type="${inputType}"${f.type === "number" ? ' step="any"' : ""} id="ff_${i}" value="${esc(val)}" autocomplete="off" data-form-type="other" data-lpignore="true"></div>`;
   }).join("") + "</div>";
 
-  // 给图片/音频字段绑定事件
+  // 给图片/音频/视频字段绑定事件
   t.fields.forEach((f, i) => {
-    if (f.type !== "image" && f.type !== "audio") return;
+    if (f.type !== "image" && f.type !== "audio" && f.type !== "video") return;
     const ua = document.getElementById("ua_" + i);
     const fi = document.getElementById("fi_" + i);
-    if (f.type === "audio") {
-      // 音频：单击选择/更换，支持拖拽；选中后显示文件名与大小
+    if (f.type === "audio" || f.type === "video") {
+      // 音频/视频：单击选择/更换，支持拖拽；选中后显示文件名、大小与预览播放器
       ua.onclick = () => fi.click();
       fi.onchange = e => { if (e.target.files[0]) pickFile(i, e.target.files[0]); };
       ua.ondragover = e => { e.preventDefault(); ua.classList.add("dragover"); };
@@ -231,6 +240,7 @@ export function renderWorkspace() {
     const ua = document.getElementById("ua_" + i);
     if (!ua) return;
     if (f.type === "audio") { renderAudioPreview(ua, state.fieldFiles[i], i); return; }
+    if (f.type === "video") { renderVideoPreview(ua, state.fieldFiles[i], i); return; }
     if (f.type !== "image") return;
     const reader = new FileReader();
     reader.onload = ev => {
@@ -348,9 +358,45 @@ function renderAudioPreview(ua, file, fieldIdx) {
   };
 }
 
+// 显示已选视频的文件名、大小与播放预览
+// 视频预览 blob URL：重新选择/清空时释放，避免内存泄漏
+const fieldVideoUrls = new Map();
+
+function renderVideoPreview(ua, file, fieldIdx) {
+  const mb = (file.size / 1024 / 1024).toFixed(1);
+  const key = baseKey(fieldIdx);
+  const old = fieldVideoUrls.get(key);
+  if (old) URL.revokeObjectURL(old);
+  const url = URL.createObjectURL(file);
+  fieldVideoUrls.set(key, url);
+  ua.innerHTML = `<button type="button" class="upload-clear-btn" title="删除当前视频" aria-label="删除当前视频">×</button>`
+    + `<div class="audio-picked">🎬 ${esc(file.name)}<br><small style="color:#4a5470">${mb} MB · 单击更换视频</small></div>`
+    + `<video controls preload="metadata" src="${url}"></video>`;
+  // 在播放器上点击播放/暂停/拖动进度时，不要冒泡触发「重新选择视频」
+  ua.querySelector("video").onclick = e => e.stopPropagation();
+  ua.querySelector(".upload-clear-btn").onclick = e => {
+    e.preventDefault();
+    e.stopPropagation();
+    delete state.fieldFiles[fieldIdx];
+    URL.revokeObjectURL(url);
+    fieldVideoUrls.delete(key);
+    const fi = document.getElementById("fi_" + fieldIdx);
+    if (fi) fi.value = "";
+    ua.innerHTML = "<span>" + VIDEO_HINT + "</span>";
+  };
+}
+
 function pickFile(fieldIdx, file) {
   const t = activeTool();
   const f = t && t.fields ? t.fields[fieldIdx] : null;
+  if (f && f.type === "video") {
+    const isVideo = file.type.startsWith("video/") || /\.(mp4|mov|webm|mkv|avi|m4v)$/i.test(file.name);
+    if (!isVideo) { showStatus("请选择视频文件", "error"); return; }
+    if (file.size > 200 * 1024 * 1024) { showStatus("视频不能超过 200MB", "error"); return; }
+    state.fieldFiles[fieldIdx] = file;
+    renderVideoPreview(document.getElementById("ua_" + fieldIdx), file, fieldIdx);
+    return;
+  }
   if (f && f.type === "audio") {
     const isAudio = file.type.startsWith("audio/") || /\.(mp3|wav|flac|m4a|ogg|aac)$/i.test(file.name);
     if (!isAudio) { showStatus("请选择音频文件", "error"); return; }

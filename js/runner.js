@@ -174,7 +174,7 @@ function captureActiveTask() {
   const fields = cloneValue(tool.fields || []);
   const files = Object.assign({}, state.fieldFiles);
   const values = fields.map((f, i) => {
-    if (f.type === "image" || f.type === "audio") return "";
+    if (f.type === "image" || f.type === "audio" || f.type === "video") return "";
     if (f.type === "seed") return resolveSeedValue(tool, f, i);
     const el = document.getElementById("ff_" + i);
     const v = el ? el.value.trim() : "";
@@ -183,7 +183,7 @@ function captureActiveTask() {
 
   // 仅当工具配置了输入项却全部为空时才视为配置错误；
   // 无输入项的"零参数工作流"允许空 nodeInfoList 提交；有图片/音频字段时允许空值提交
-  const hasFileField = fields.some(f => f.type === "image" || f.type === "audio");
+  const hasFileField = fields.some(f => f.type === "image" || f.type === "audio" || f.type === "video");
   const hasValue = values.some(v => v !== "");
   if (fields.length && !hasFileField && !hasValue) {
     showStatus("没有可提交的参数，请检查工具配置", "error");
@@ -206,8 +206,8 @@ async function executeRemote(run) {
   const nodeInfoList = [];
   for (let i = 0; i < task.fields.length; i++) {
     const f = task.fields[i];
-    if (f.type === "image" || f.type === "audio") {
-      // 图片/音频均可选：有文件则上传，无文件则提交空值，由远端校验并返回错误
+    if (f.type === "image" || f.type === "audio" || f.type === "video") {
+      // 图片/音频/视频均可选：有文件则上传，无文件则提交空值，由远端校验并返回错误
       const file = task.files[i];
       if (file) {
         runStatus(run, "⏫ 正在上传「" + f.label + "」…（可点「立即取消」中断）");

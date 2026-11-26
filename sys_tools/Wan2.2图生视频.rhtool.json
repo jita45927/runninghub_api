@@ -1,0 +1,58 @@
+{
+  "type": "runninghub-tool-config",
+  "version": 1,
+  "name": "Wan2.2图生视频",
+  "icon": "🎞️",
+  "desc": "WAN2.2图生视频应用：上传首帧图片并填写提示词，生成5-8秒短视频；可调整视频宽高、时长与采样步数",
+  "sourceUrl": "https://www.runninghub.cn/ai-detail/2031470431928061953",
+  "toolType": "app",
+  "webappId": "2031470431928061953",
+  "instanceType": "default",
+  "tags": [
+    "视频生成"
+  ],
+  "fields": [
+    {
+      "label": "上传首帧图片",
+      "type": "image",
+      "nodeId": "4",
+      "fieldName": "image",
+      "def": ""
+    },
+    {
+      "label": "视频提示词",
+      "type": "textarea",
+      "nodeId": "51",
+      "fieldName": "text",
+      "def": "人物向镜头挥手，一只鸟飞入画面落在人物的肩膀上。"
+    },
+    {
+      "label": "视频宽度（小于1024）",
+      "type": "number",
+      "nodeId": "47",
+      "fieldName": "value",
+      "def": "480"
+    },
+    {
+      "label": "视频高度（小于1024）",
+      "type": "number",
+      "nodeId": "46",
+      "fieldName": "value",
+      "def": "832"
+    },
+    {
+      "label": "视频时长（秒，5-8）",
+      "type": "number",
+      "nodeId": "48",
+      "fieldName": "value",
+      "def": "5"
+    },
+    {
+      "label": "采样步数（2-4，同步高/低噪，越高越慢）",
+      "type": "number",
+      "nodeId": "49",
+      "fieldName": "value",
+      "def": "3"
+    }
+  ]
+}

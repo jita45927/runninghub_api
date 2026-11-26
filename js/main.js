@@ -281,7 +281,7 @@ async function saveCurrentDefaults() {
     let count = 0;
     let skippedImages = 0;
     (t.fields || []).forEach((f, i) => {
-      if (f.type === "image" || f.type === "audio") { skippedImages++; return; }  // File 对象不写入 JSON 配置
+      if (f.type === "image" || f.type === "audio" || f.type === "video") { skippedImages++; return; }  // File 对象不写入 JSON 配置
       const el = document.getElementById("ff_" + i);
       if (!el) return;
       const value = el.value;

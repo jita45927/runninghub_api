@@ -279,6 +279,9 @@ body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: va
 .upload-audio { min-height: 96px; }
 .upload-audio .audio-picked { font-size: 13px; color: #dbe4ff; line-height: 1.8; word-break: break-all; }
 .upload-audio audio { width: 92%; max-width: 460px; margin-top: 10px; }
+/* 视频上传：无缩略图，展示文件名、大小与播放预览 */
+.upload-video { min-height: 120px; }
+.upload-video video { width: 92%; max-width: 460px; margin-top: 10px; border-radius: 8px; }
 .upload-area:hover, .upload-area.dragover { border-color: var(--accent); }
 .upload-area img {
   max-width: 100%; max-height: 260px; border-radius: 8px;

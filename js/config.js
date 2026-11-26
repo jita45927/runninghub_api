@@ -17,6 +17,7 @@ export const LS = {
 export const FIELD_TYPES = {
   image:    "图片上传",
   audio:    "音频上传",
+  video:    "视频上传",
   textarea: "多行文本",
   text:     "单行文本",
   number:   "数字",
