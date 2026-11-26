@@ -1,16 +1,17 @@
 {
   "app": "runninghub",
-  "version": "1.0.7",
-  "date": "2026-11-26",
-  "notes": "本次更新包含工具配置与功能优化，建议升级到最新版本。",
-  "page": "https://github.com/jita45927/runninghub_api/releases/tag/v1.0.7",
+  "version": "1.0.8",
+  "date": "2026-11-27",
+  "notes": "- 新增「视频上传」字段类型：支持单击/拖拽选择视频、上传前直接播放预览、一键删除，随任务自动上传。\n- 新增工具：Wan2.2图生视频、wan2_2_14B首尾帧生视频、SEEDVR2循环长视频修复放大、WAN2.2VACE-图生视频三段合并14秒长视频。\n- 视频生成类工具支持设置视频宽高、时长、采样步数与随机种子，长视频工作流支持分段提示词。\n- 系统工具随安装包完整更新，可通过「重置系统工具」恢复全部内置工具与封面。\n- 版本号升至 1.0.8。",
+  "page": "https://github.com/jita45927/runninghub_api/releases/tag/v1.0.8",
   "installer": {
-    "name": "RunningHub-AI-Toolbox-Setup-1.0.7.exe",
-    "size": 22528989,
-    "sha256": "80a4d8723c90111ffdc2aaf5fda2e85d2aaa62afee9b1cbaec94a519d10ac0d8",
+    "name": "RunningHub-AI-Toolbox-Setup-1.0.8.exe",
+    "size": 25841369,
+    "sha256": "9b32857cb1e617dbd3fb8b45e912657bd4893886b37b02f399563575850513cb",
     "urls": [
-      "https://gitee.com/matt8469/runninghub_api/releases/download/v1.0.7/RunningHub-AI-Toolbox-Setup-1.0.7.exe",
-      "https://github.com/jita45927/runninghub_api/releases/download/v1.0.7/RunningHub-AI-Toolbox-Setup-1.0.7.exe"
+      "https://gitee.com/matt8469/runninghub_api/releases/download/v1.0.8/RunningHub-AI-Toolbox-Setup-1.0.8.exe",
+      "https://github.com/jita45927/runninghub_api/releases/download/v1.0.8/RunningHub-AI-Toolbox-Setup-1.0.8.exe"
     ]
-  }
+  },
+  "signature": "eooAaoU9oR4anWWfx4hxMpy7/OtVoSRKiAKTBwocu5hT/TEhih4r5upSYXyvTkwk1sfqiT9BASicvusiChR4CQ=="
 }
