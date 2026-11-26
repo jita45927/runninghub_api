@@ -95,7 +95,12 @@ function notifyToolStatus() {
 
 // 随机种子上限：2^53-1，保证在 JS / JSON 中不丢精度
 const SEED_MAX = Number.MAX_SAFE_INTEGER;
-function randomSeed() { return Math.floor(Math.random() * SEED_MAX); }
+// 部分自定义节点（如 SeedVR2 内部用 numpy 播种）只接受 0 ~ 2^32-1，超出会直接执行失败；
+// 字段可用 seedMax 声明上限，未声明时沿用 2^53-1。
+function randomSeed(max) {
+  const cap = max > 0 ? max : SEED_MAX;
+  return Math.floor(Math.random() * cap);
+}
 
 // 点击「开始生成 / 进入列队」的快照时刻，按模式算出本次要提交的种子，
 // 并把显示的基准值推进到下一次（固定值不变），实现每次点击就地变化。
@@ -104,9 +109,11 @@ function resolveSeedValue(t, f, i) {
   const el = document.getElementById("ff_" + i);
   const modeEl = document.getElementById("fm_" + i);
   const mode = modeEl ? modeEl.value : "random";
+  const cap = Number(f.seedMax) > 0 ? Math.min(Number(f.seedMax), SEED_MAX) : SEED_MAX;
   const base = Number(el ? el.value.trim() : "");
-  const baseValid = Number.isFinite(base);
-  const val = (mode === "random" || !baseValid) ? randomSeed() : base;
+  // 超出字段声明上限的输入（含递增后越界）按无效处理，避免提交后被节点拒绝
+  const baseValid = Number.isFinite(base) && base >= 0 && base <= cap;
+  const val = (mode === "random" || !baseValid) ? randomSeed(cap) : base;
 
   if (el) {
     let next = null;

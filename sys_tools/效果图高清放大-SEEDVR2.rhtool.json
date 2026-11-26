@@ -3,7 +3,7 @@
   "version": 1,
   "name": "效果图高清放大-SEEDVR2",
   "icon": "🔍",
-  "desc": "上传效果图，SeedVR2 放大到目标分辨率，适用于AI生成的1K分辨率图放大，特别模糊的原始图放大效果一般。",
+  "desc": "上传单张效果图，SeedVR2 按目标短边分辨率放大，适用于AI生成的1K分辨率图；特别模糊的原始图放大效果一般。",
   "sourceUrl": "https://www.runninghub.cn/post/2035302221096689666",
   "toolType": "workflow",
   "webappId": "2035302221096689666",
@@ -24,14 +24,15 @@
       "type": "number",
       "nodeId": "102",
       "fieldName": "value",
-      "def": "1536"
+      "def": "2176"
     },
     {
-      "label": "种子（留空则用工流默认值）",
-      "type": "number",
+      "label": "随机种子",
+      "type": "seed",
       "nodeId": "1",
       "fieldName": "seed",
-      "def": ""
+      "def": "",
+      "seedMax": "4294967295"
     }
   ]
 }
