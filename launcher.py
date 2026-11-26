@@ -477,16 +477,32 @@ def close_app_windows():
 
 
 def request_exit(*_):
-    """托盘退出：与页面按钮一样，每次都需要确认。"""
+    """托盘退出：与页面按钮一样，每次都需要确认。
+
+    确认框必须放到后台线程弹：pystray 的菜单回调运行在托盘消息线程里，该线程的
+    活动窗口仍是托盘弹出窗口，在这里直接弹 MessageBoxW 会导致对话框无法被激活，
+    真实鼠标点击送不到按钮（只有强行发 WM_COMMAND 才生效）。
+    """
     global _EXITING
     if _EXITING:
         return
-    flags = 0x04 | 0x20 | 0x40000 | 0x10000  # Yes/No、问号、置顶、置前
-    msg = "确定彻底退出程序吗？\n\n主窗口、后台服务和系统托盘都会关闭；正在运行的任务可能被中断。"
-    if ctypes.windll.user32.MessageBoxW(0, msg, APP_TITLE, flags) != 6:  # IDYES
-        return
     _EXITING = True
-    threading.Thread(target=_request_shutdown, daemon=True).start()
+
+    def worker():
+        global _EXITING
+        flags = 0x04 | 0x20 | 0x40000 | 0x10000  # Yes/No、问号、置顶、置前
+        msg = "确定彻底退出程序吗？\n\n主窗口、后台服务和系统托盘都会关闭；正在运行的任务可能被中断。"
+        try:
+            if ctypes.windll.user32.MessageBoxW(0, msg, APP_TITLE, flags) != 6:  # IDYES
+                _EXITING = False  # 用户取消，允许再次点击退出
+                return
+        except Exception:
+            _EXITING = False
+            log("退出确认弹窗失败：" + traceback.format_exc())
+            return
+        _request_shutdown()
+
+    threading.Thread(target=worker, daemon=True).start()
 
 
 def _request_shutdown():
