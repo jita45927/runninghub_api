@@ -397,6 +397,20 @@ document.addEventListener("rh:grant-tools-dir", () => { grantToolsDir(); });
   ];
   let step = -1;
   let anchorEl = null;
+  let shotTries = 0;
+
+  // 截图加载失败（如覆盖安装后旧页面仍引用已被替换的图片）：自动重试一次，仍失败则给出提示
+  shotImg.onerror = () => {
+    const base = shotImg.dataset.base || "";
+    if (!base) return;
+    if (shotTries < 1) {
+      shotTries++;
+      shotImg.src = base + "?r=" + Date.now();
+      return;
+    }
+    shotImg.removeAttribute("src");
+    shotText.textContent = "截图加载失败，请重启程序后再试。";
+  };
 
   // 手指步骤：高亮挖孔对准目标元素，手指与提示卡跟随目标位置
   function placeAtAnchor() {
@@ -446,6 +460,8 @@ document.addEventListener("rh:grant-tools-dir", () => { grantToolsDir(); });
     callout.style.display = isShot ? "none" : "block";
     const progress = (step + 1) + " / " + steps.length;
     if (isShot) {
+      shotTries = 0;
+      shotImg.dataset.base = s.image;
       shotImg.src = s.image;
       shotText.textContent = s.text;
       shotStep.textContent = progress;

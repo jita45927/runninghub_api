@@ -405,15 +405,23 @@ def _kill_stale_browser():
         log("清理残留浏览器进程失败：" + traceback.format_exc())
 
 
-def show_or_open_app_window(url=None):
-    """已有可见窗口则唤回；窗口已通过 X 关闭时，清理残留后重新打开。返回是否成功。"""
+def show_or_open_app_window(url=None, fresh=False):
+    """已有可见窗口则唤回；窗口已通过 X 关闭时，清理残留后重新打开。返回是否成功。
+
+    fresh=True 用于程序启动阶段：覆盖安装不会关闭 Edge 窗口，此时找到的窗口必然是
+    上一次运行残留的旧页面（旧 JS / 旧端口 / 旧图片名），只能关掉后重新加载。
+    """
     url = url or APP_URL
     with _WINDOW_LOCK:
         windows = _app_windows()
-        if windows:
+        if windows and not fresh:
             log("唤回已有窗口：hwnd=%s" % windows[0])
             _activate_window(windows[0])
             return True
+        if windows:
+            log("检测到上次运行残留的窗口，关闭后重新加载：hwnd=%s" % windows[0])
+            close_app_windows()
+            time.sleep(0.5)  # 等旧浏览器进程退出并释放配置目录，避免新窗口被转交给旧实例
         log("未找到主窗口，准备重新打开：" + url)
         _kill_stale_browser()
         if open_app_window(url):
@@ -674,7 +682,7 @@ def main():
 
             def open_window():
                 time.sleep(0.5)  # 等服务可以接受请求再开窗口，避免白屏
-                show_or_open_app_window(APP_URL)
+                show_or_open_app_window(APP_URL, fresh=True)
 
             threading.Thread(target=open_window, daemon=True).start()
             start_window_monitor()
